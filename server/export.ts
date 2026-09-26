@@ -55,6 +55,8 @@ export interface ExportOptions {
   documentsDir?: string;
   /** Serveur de l'éditeur déjà démarré ; sinon un serveur temporaire est lancé le temps de l'export. */
   baseUrl?: string;
+  /** En-tête Authorization de la requête d'export : Chrome le renvoie à un `baseUrl` protégé par mot de passe. */
+  authorization?: string;
   /** Attente maximale de `window.__ready` sur la route d'impression. */
   readyTimeoutMs?: number;
   /** Fichier de préréglages (tests) ; défaut print/presets.json. */
@@ -592,6 +594,7 @@ export async function exportPdf(options: ExportOptions): Promise<ExportResult> {
     let pngs: string[] = [];
     try {
       const page = await browser.newPage();
+      if (options.authorization) await page.setExtraHTTPHeaders({ authorization: options.authorization });
       // Mesure des lignes et impression dans le même média que le PDF.
       await page.emulateMediaType('print');
       progress('rendu', 'Rendu des faces dans Chrome', 0.1);
@@ -786,6 +789,8 @@ export function startExportJob(options: ExportOptions): ExportJob {
 function listeningUrl(app: FastifyInstance): string | undefined {
   const address = app.server.address();
   if (!address || typeof address === 'string') return undefined;
+  // Serveur à l'écoute sur toutes les interfaces (conteneur) : Chrome, lancé à côté, passe par la boucle locale.
+  if (address.address === '0.0.0.0' || address.address === '::') return `http://127.0.0.1:${address.port}`;
   const host = address.family === 'IPv6' ? `[${address.address}]` : address.address;
   return `http://${host}:${address.port}`;
 }
@@ -802,6 +807,7 @@ export function registerExportRoutes(app: FastifyInstance, ctx: RouteContext): v
       preset: parsePreset(req.query.preset),
       documentsDir: ctx.documentsDir,
       baseUrl: listeningUrl(req.server),
+      authorization: req.headers.authorization,
       confirmLowResolution: isFlag(req.query.confirmLowResolution),
       confirmHiddenLayers: isFlag(req.query.confirmHiddenLayers),
     }),
@@ -815,6 +821,7 @@ export function registerExportRoutes(app: FastifyInstance, ctx: RouteContext): v
       preset: parsePreset(req.query.preset),
       documentsDir: ctx.documentsDir,
       baseUrl: listeningUrl(req.server),
+      authorization: req.headers.authorization,
       confirmLowResolution: isFlag(req.query.confirmLowResolution),
       confirmHiddenLayers: isFlag(req.query.confirmHiddenLayers),
     });

@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import middie from '@fastify/middie';
 import fastifyStatic from '@fastify/static';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readdir, rm, stat } from 'node:fs/promises';
 import type { Server as HttpServer } from 'node:http';
@@ -20,6 +20,10 @@ export interface ServerOptions {
   port?: number;
   documentsDir?: string;
   logger?: boolean;
+  /** Adresse d'écoute : 127.0.0.1 par défaut ; 0.0.0.0 dans un conteneur, derrière un proxy. */
+  host?: string;
+  /** Mot de passe exigé (authentification HTTP Basic, identifiant libre) : seulement pour un serveur exposé. */
+  password?: string;
 }
 
 export interface RunningServer {
@@ -29,8 +33,18 @@ export interface RunningServer {
   close(): Promise<void>;
 }
 
-// Écoute uniquement en local : l'éditeur lit et écrit des fichiers du disque (décision S4).
+// Écoute uniquement en local : l'éditeur lit et écrit des fichiers du disque (décision S4). Un serveur en ligne
+// (conteneur) écoute plus large, mais seulement avec un mot de passe (`password`).
 const HOST = '127.0.0.1';
+
+function passwordMatches(header: string | undefined, password: string): boolean {
+  const match = /^Basic\s+(\S+)$/i.exec(header ?? '');
+  if (!match) return false;
+  const decoded = Buffer.from(match[1], 'base64').toString('utf8');
+  const given = createHash('sha256').update(decoded.slice(decoded.indexOf(':') + 1)).digest();
+  // Empreintes de même longueur : comparaison à temps constant, quelle que soit la saisie.
+  return timingSafeEqual(given, createHash('sha256').update(password).digest());
+}
 
 // Hors de la plage que balaie fluidplan (5178 et les 9 suivants) : ses serveurs de plans prenaient
 // 5180 dès que deux ou trois tournaient, et `npm run dev` échouait alors sur EADDRINUSE.
@@ -89,6 +103,17 @@ export async function createApp(options: ServerOptions = {}): Promise<FastifyIns
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 50 * 1024 * 1024 });
   app.decorate('documentsDir', documentsDir);
 
+  const password = options.password;
+  if (password) {
+    // Tout est protégé sauf /api/health (contrôle du déploiement ; ne dit rien des documents). Le navigateur
+    // renvoie ensuite l'identifiant de lui-même, requêtes fetch de l'éditeur comprises.
+    app.addHook('onRequest', async (req, reply) => {
+      if (req.url === '/api/health' || passwordMatches(req.headers.authorization, password)) return;
+      reply.header('www-authenticate', 'Basic realm="Fluidprint", charset="UTF-8"').code(401).send({ error: 'Mot de passe requis' });
+      return reply;
+    });
+  }
+
   app.get('/api/health', async () => ({ ok: true }));
 
   // Les routes de l'API sont branchées ici par les modules qui les portent (documents, assets, export).
@@ -120,7 +145,7 @@ export async function createApp(options: ServerOptions = {}): Promise<FastifyIns
 export async function startServer(options: ServerOptions = {}): Promise<RunningServer> {
   const app = await createApp(options);
   try {
-    await app.listen({ host: HOST, port: options.port ?? DEFAULT_PORT });
+    await app.listen({ host: options.host ?? HOST, port: options.port ?? DEFAULT_PORT });
   } catch (error) {
     // Sans cela, le serveur Vite déjà créé garderait le processus en vie après l'échec.
     await app.close();

@@ -1,0 +1,11 @@
+node_modules
+dist
+data
+documents
+print/.venv
+**/__pycache__
+.pytest_cache
+.git
+.env
+.env.*
+.deploy-*.env

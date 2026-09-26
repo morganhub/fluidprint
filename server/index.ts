@@ -2,9 +2,18 @@ import { DEFAULT_PORT, startServer } from './app';
 
 const dev = process.argv.includes('--dev');
 const port = Number(process.env.PORT ?? DEFAULT_PORT);
+// Déploiement (conteneur derrière le proxy) : écoute élargie et mot de passe, lus dans l'environnement.
+const host = process.env.FLUIDPRINT_HOST || undefined;
+const password = process.env.FLUIDPRINT_PASSWORD || undefined;
+
+// L'éditeur lit et écrit sur le disque : jamais exposé au-delà de la machine sans mot de passe.
+if (host && !['127.0.0.1', 'localhost', '::1'].includes(host) && !password) {
+  console.error(`FLUIDPRINT_HOST=${host} exige FLUIDPRINT_PASSWORD : démarrage refusé.`);
+  process.exit(1);
+}
 
 try {
-  const server = await startServer({ dev, hmr: dev, port, logger: false });
+  const server = await startServer({ dev, hmr: dev, port, logger: false, host, password });
   console.log(`Fluidprint : ${server.url}`);
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.on(signal, () => void server.close().then(() => process.exit(0)));

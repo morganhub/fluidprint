@@ -20,7 +20,14 @@ export function findChrome(): string {
 
 // Tous les rendus automatisés (import, contrôle au pixel, export) partagent ces réglages,
 // sinon les mesures de texte peuvent différer d'un outil à l'autre.
-export const CHROME_ARGS = ['--no-first-run', '--no-default-browser-check', '--font-render-hinting=none', '--hide-scrollbars'];
+export const CHROME_ARGS = [
+  '--no-first-run',
+  '--no-default-browser-check',
+  '--font-render-hinting=none',
+  '--hide-scrollbars',
+  // Dans un conteneur, le bac à sable de Chrome n'a pas les espaces de noms dont il a besoin (Dockerfile).
+  ...(process.env.CHROME_NO_SANDBOX === '1' ? ['--no-sandbox'] : []),
+];
 
 export function launchBrowser(options: LaunchOptions = {}): Promise<Browser> {
   return puppeteer.launch({ executablePath: findChrome(), headless: true, args: CHROME_ARGS, ...options });

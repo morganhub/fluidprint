@@ -39,6 +39,8 @@ src/panels/
 src/components/ui/   Button, Input/Label/NativeSelect, NumberField, Tabs, Tooltip, Popover, Dialog
 src/components/SwatchPicker.tsx   choix d'une nuance du nuancier
 src/word/            import Word : structure lue (types.ts), styles, article, placement, interface (« Placer… »)
+src/agent/           agent IA de navigateur : window.fluidprint (api.ts : repère du format fini, une étape « Agent IA »
+                     par action), guide (guide.ts, fluidprint.help()), bouton « IA Agent » (AgentButton.tsx)
 server/docx/         lecteur .docx sans dépendance (zip plafonné, XML, structure)
 ```
 

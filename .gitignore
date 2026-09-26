@@ -11,3 +11,11 @@ dist/
 
 # Documents de l'utilisateur (données locales, jamais versionnées)
 documents/
+data/
+
+# Secrets du déploiement (mot de passe du site, surcharges fluiddeploy)
+.env
+.deploy-*.env
+
+# Profils ICC d'Adobe copiés depuis Windows pour l'image Docker : non redistribués par le dépôt
+print/profiles/*.icc

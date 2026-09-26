@@ -1,0 +1,17 @@
+# Déploiement (fluiddeploy) : /opt/fluidprint sur le VPS, derrière nginx de Plesk (fluidprint.fluidifia.com).
+services:
+  fluidprint:
+    build: .
+    image: fluidprint:latest
+    container_name: fluidprint
+    restart: unless-stopped
+    # Récupère les processus Chrome terminés (import, export).
+    init: true
+    # FLUIDPRINT_PASSWORD : généré par fluiddeploy depuis le .env du poste.
+    env_file: .env
+    ports:
+      - "127.0.0.1:18090:5190"
+    volumes:
+      - ./data/documents:/data/documents
+    # Chrome manque vite des 64 Mo de /dev/shm par défaut sur de grandes pages.
+    shm_size: 1gb

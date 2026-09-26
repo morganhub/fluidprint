@@ -1,0 +1,21 @@
+{
+  "name": "fluidprint",
+  "server": "ovh",
+  "type": "docker",
+  "remotePath": "fluidprint",
+  "url": "https://fluidprint.fluidifia.com",
+  "logs": ["/var/www/vhosts/system/fluidprint.fluidifia.com/logs"],
+  "docker": { "compose": "docker-compose.yml", "build": true },
+  "exclude": ["/test", "/docs", "/deploy", "/documents", "/dist", "print/.venv", "__pycache__", ".pytest_cache"],
+  "env": { "file": ".env" },
+  "envGenerate": { "required": ["FLUIDPRINT_PASSWORD"] },
+  "requireEnv": true,
+  "hooks": {
+    "before": ["mkdir -p data/documents && chown 1000:1000 data data/documents"],
+    "after": ["for i in $(seq 1 60); do curl -fs -o /dev/null http://127.0.0.1:18090/api/health && exit 0; sleep 1; done; echo 'fluidprint muet après 60 s' >&2; exit 1"]
+  },
+  "health": [
+    { "path": "/api/health", "status": 200 },
+    { "path": "/", "status": 401 }
+  ]
+}

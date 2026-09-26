@@ -1,5 +1,6 @@
 import { Copy, FilePlus2, FileText, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { AgentButton } from '../agent/AgentButton';
 import { Button } from '../components/ui/button';
 import { DuplicateDocumentDialog, NewDocumentDialog, openDocument } from './DocumentDialogs';
 import { ImportDesignButton } from './ImportDesignButton';
@@ -55,8 +56,10 @@ export function DocumentList() {
     <main className="mx-auto max-w-3xl p-8 text-neutral-900">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Fluidprint</h1>
+        {empty && <AgentButton />}
         {!empty && (
           <div className="flex flex-wrap items-center gap-2">
+            <AgentButton />
             {importButton}
             {wordButton}
             {newButton}

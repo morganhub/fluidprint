@@ -116,6 +116,31 @@ npx vitest run        # tests unitaires et tests dans Chrome
 npm run test:print    # chaîne d'impression (pytest)
 ```
 
+## Agent IA
+
+Un agent IA de navigateur (Claude dans Chrome, Cowork…) pilote Fluidprint par programme plutôt qu'à la souris :
+bouton **IA Agent** (robot) de l'accueil et de la barre du haut → consigne à copier dans sa conversation et guide
+complet. L'agent exécute `window.fluidprint` dans l'onglet (`fluidprint.help()` renvoie le guide) : lire le document
+(`info`, `objects`, `getText`), modifier texte, styles, couleurs et positions en mm, créer des objets, placer des
+photos, contrôler (`preflight`, `overset`) et exporter. Chaque action est une étape d'annulation « Agent IA : … »,
+enregistrée automatiquement et visible aussitôt. Code : `src/agent/` (`api.ts`, `guide.ts`).
+
+## En ligne
+
+https://fluidprint.fluidifia.com : conteneur Docker (`Dockerfile`, `docker-compose.yml`) sous `/opt/fluidprint` du
+VPS, derrière nginx de Plesk, déployé par fluiddeploy (`fluiddeploy.json`). Protégé par mot de passe (HTTP Basic,
+identifiant libre) : `FLUIDPRINT_PASSWORD` du `.env` local (non versionné), recopié sur le serveur à chaque
+déploiement. Documents dans `/opt/fluidprint/data/documents`.
+
+```sh
+fluiddeploy deploy --yes              # construit l'image sur le serveur et relance le conteneur
+fluiddeploy run deploy/nginx_setup.sh # une fois : proxy nginx vers le conteneur (127.0.0.1:18090)
+fluiddeploy docker logs
+```
+
+Les profils ICC d'Adobe (`CoatedFOGRA39.icc`, `CoatedGRACoL2006.icc`) sont copiés depuis
+`C:\Windows\System32\spool\drivers\color` dans `print/profiles/` (ignorés par git) pour partir dans l'image.
+
 ## Architecture
 
 Voir [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) : modèle de document, store, rendu, points
