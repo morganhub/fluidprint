@@ -8,7 +8,7 @@ document décrit le cœur et **comment brancher une fonction sans toucher au cœ
 
 | Route | Écran |
 | --- | --- |
-| `/` | accueil : liste des documents, « Nouveau document », « Dupliquer », import (`src/viewer/DocumentList.tsx`, voir « Gabarits, nouveau document, duplication ») |
+| `/` | accueil : liste des documents, « Nouveau document », « Nouveau document depuis Word », « Dupliquer », import (`src/viewer/DocumentList.tsx`, voir « Gabarits, nouveau document, duplication » et « Import Word ») |
 | `/doc/:id` | **l'éditeur** (`src/editor/EditorApp.tsx`) |
 | `/view/:id` | visionneuse en lecture seule (`src/viewer/Viewer.tsx`) |
 | `/print/:id` | route d'impression, lue par Puppeteer (`src/render/PrintRoute.tsx`) |
@@ -38,6 +38,8 @@ src/panels/
   properties/*.tsx         sections Position et taille, Apparence, Texte ; registry.ts
 src/components/ui/   Button, Input/Label/NativeSelect, NumberField, Tabs, Tooltip, Popover, Dialog
 src/components/SwatchPicker.tsx   choix d'une nuance du nuancier
+src/word/            import Word : structure lue (types.ts), styles, article, placement, interface (« Placer… »)
+server/docx/         lecteur .docx sans dépendance (zip plafonné, XML, structure)
 ```
 
 ## Unités et repères
@@ -252,6 +254,54 @@ est gardé dans `documents/<id>/design.dc.html`, source du document (`source.pat
   carré 100 × 100 sans fond perdu, dépliant 210 × 100 à repères ; ligne de commande), `test/import-route.test.ts`
   (route par `inject`, accueil → import du flyer → éditeur).
 
+## Import Word (.docx)
+
+Sur le modèle de « Placer » d'InDesign : le serveur LIT le fichier (structure, images), l'éditeur le PLACE (il est
+seul à savoir mesurer la coulée du texte : polices, coupures de Chrome), en une seule étape d'annulation.
+
+| Fichier | Rôle |
+| --- | --- |
+| `server/docx/zip.ts` | zip sans dépendance (répertoire central, ZIP64, entrées stockées ou compressées) ; `ZIP_LIMITS` : fichier 100 Mo, entrée 64 Mo et archive 256 Mo une fois décompressées (`inflateRawSync` plafonné : une bombe ne remplit jamais la mémoire) |
+| `server/docx/xml.ts` | analyseur XML maison (arbre léger), espaces de noms ramenés à leurs préfixes canoniques (`ns0:p` → `w:p`) |
+| `server/docx/read.ts` | `readDocx(buffer, { label, limits })` → `{ document: WordDocument, media }` ; refus = `DocxError` (`code` : `empty`, `legacy-doc`, `encrypted`, `not-zip`, `not-word`, `too-large`, `corrupt`) au message français destiné à l'utilisateur. Repris du lecteur de fluidplan (Markdown), porté en TypeScript |
+| `src/word/types.ts` | structure partagée : `WordDocument` (blocs, images, styles employés, polices et couleurs rencontrées, avertissements), `WordParagraph` (style Word : `styleId`, `styleName` ; `heading` 1-6, `title`, `list` {kind, level, number, format, marker}, `align`, `content`), `WordText` (texte, `\n`, `\t`, bold / italic / underline directs, `link`), `WordImageRef` (position dans le flux), `WordTable` (lignes et cellules) ; `WordImportResponse`, `NewFromWordResponse` |
+| `server/wordImport.ts` | routes ci-dessous ; images enregistrées par `storeImageAsset` (`server/assets.ts`, la même logique que `POST /api/assets` : originaux intacts, aperçus, copie PNG d'un TIFF) |
+| `src/word/styles.ts` | `styleTarget` (style Word → nom du style du document : nom affiché par Word en français pour les styles prédéfinis, « heading 1 » → « Titre 1 », « Quote » → « Citation »…), `bodyBaseStyle` (style de corps du document, sinon texte par défaut), `scaledStyle` (échelle : Titre ×2,4 800, Titre 1 à 6 ×1,9 / 1,55 / 1,3 / 1,15 / 1 / 1 en 700, Citation italique… ; nuance « Titres » du nuancier si elle existe), `resolveStyles` (réutilise un style de même nom, casse et accents ignorés ; sinon le crée, `origin: 'word'`) |
+| `src/word/story.ts` | `buildWordStory(draft, word, assets, { typography, targetStyle })` : article du modèle (paragraphes nettoyés, style du bloc = le plus employé, styles propres des autres paragraphes, mise en forme directe, listes, tableaux en tabulations, liens → texte, typographie française), images non placées et leur position, avertissements |
+| `src/word/place.ts` | `placeWord(state, response, target, options, measure)` → `WordPlacementReport` ; cibles `frame` (texte remplacé, toute la chaîne), `point` (`frameBoxAtPoint` : zone de sécurité du volet, du point jusqu'en bas), `panel` ; « Remplir automatiquement » : `nextSafetySlots` (volets suivants puis faces suivantes), blocs chaînés créés, coulée mesurée une fois, blocs restés vides retirés ; `frameZone` : blocs neufs à 1,5 mm sous le haut et 0,5 mm au-dessus du bas de la zone (l'étendue des lignes d'un grand titre serré et la tolérance de la coulée restent dans la zone surveillée par le contrôle en amont) |
+| `src/render/textFlow.ts` | `fitStory(doc, frameIds)` : coulée mesurée comme au rendu, avec le texte en excès (un bloc fictif très haut derrière le dernier) — la mesure que `placeWord` reçoit dans le navigateur |
+| `src/word/client.ts` | `uploadWord`, `createFromWord`, `isWordFile`, `carriesOnlyWordFiles` ; `stashPendingWord` / `takePendingWord` (sessionStorage : le fichier lu à l'accueil attend l'éditeur) ; `loadWordFonts` (toutes les graisses d'Open Sans avant de mesurer) |
+| `src/word/PlaceWord.tsx` | action « Placer… » (barre du haut, ordre 5) et sa boîte (fichier, « Remplir automatiquement », « Typographie française ») ; mode `place-word` (curseur chargé, Échap annule) ; dépôt d'un `.docx` sur la page (DropImageOverlay laisse passer les fichiers Word) ; remplissage d'un document créé depuis l'accueil ; rapport (`[data-word-report]`). Surcouche `place-word` |
+| `src/viewer/NewFromWordDialog.tsx` | « Nouveau document depuis Word » (fichier, nom, gabarit, typographie) |
+
+| Route | Effet |
+| --- | --- |
+| `POST /api/doc/:id/word` | multipart `file` (.docx, 50 Mo au plus : `MAX_WORD_BYTES`, `RouteContext.maxWordBytes` pour les tests) → 200 `WordImportResponse` ; images enregistrées dans `documents/<id>/assets/` ; `document.json` n'est PAS réécrit (l'éditeur ouvert ajoute photos et texte, sinon le serveur lui répondrait 409). 400 `{ error, code }` : pas un `.docx` (`not-docx`), `.doc`, chiffré, zip qui n'est pas un Word, bombe ; 404 document ; 413 trop lourd ; 415 pas multipart. Une image EMF, WMF, GIF… n'est pas importée : avertissement |
+| `POST /api/doc/from-word` | multipart `file`, `name`, `templateId` → 201 `NewFromWordResponse` : fichier lu d'abord (un refus ne laisse aucun document), puis `createDocument` et images ; nom par défaut tiré du fichier |
+
+Correspondance Word → modèle :
+
+- **Paragraphe** → `Paragraph` ; espaces multiples réduites (le rendu les fusionne, l'éditeur non) ; paragraphes vides
+  écartés. Retour à la ligne → `\n` ; tabulation → `\t`.
+- **Style** → style de paragraphe de même nom. Le style qui porte le plus de texte devient celui du bloc
+  (`paragraphStyleId`, `style`) ; les autres paragraphes ont un style propre (`Paragraph.paragraphStyleId`) dont TOUTES
+  les valeurs sont écrites chez eux (voir « Texte »). Titre de niveau hiérarchique sans style de titre → « Titre N ».
+- **Gras / italique / souligné** directs (ou d'un style de caractère) → `fontWeight` 700 / 400, `italic`, `underline`
+  des segments, seulement s'ils changent quelque chose au style. Le soulignement du style « Lien hypertexte » est ignoré.
+- **Liste** → `list` ({ kind, level, format, suffix, start }), `leftIndent` = 1,5 cadratin × (niveau + 1),
+  `firstLineIndent` = −1,5 cadratin ; `start` seulement là où la numérotation de Word diffère de la règle du rendu
+  (`model/lists.ts`). Format inconnu de Word → chiffres, avec avertissement.
+- **Tableau** → une rangée = un paragraphe, cellules séparées par `\t` (avertissement) ; tableau dans une cellule : aplati
+  en « / ». **Lien** → texte ; adresse au rapport. **Note de bas de page, graphique, SmartArt, équation** : avertissement.
+- **Image** → `doc.assets` (non placée), sa position (« après « … » ») au rapport.
+- **Polices, couleurs, tailles** de Word : ignorées ; polices et couleurs listées dans un avertissement.
+
+- **Tests** : `test/docx.test.ts` (lecteur : structure, refus, bombe), `test/word-import.test.ts` (article, styles,
+  placement dans le store avec une coulée simulée, une étape d'annulation), `test/word-route.test.ts` (routes par
+  `inject`), `test/word-editor.test.ts` (Chrome : bloc sélectionné, curseur chargé, remplissage automatique mesuré,
+  dépôt, édition d'une liste, accueil → document neuf → export RVB). Les `.docx` sont fabriqués dans le code
+  (`test/helpers/docx.ts` : écrivain zip minimal).
+
 ## Rendu
 
 `src/render/**` dessine aussi bien l'éditeur que la route d'impression. Pour l'éditeur, **chaque objet
@@ -373,6 +423,9 @@ registerTopbarAction({ id: 'export', order: 10, label: 'Exporter', icon: FileDow
 registerTopbarAction({ id: 'versions', order: 30, label: 'Versions', component: VersionsButton });
 ```
 
+Ordres en place : Placer (Word) 5, Exporter 10, Aperçu impression 20, Enregistrer une version 30, Typographie 40,
+Pages types 45, Aperçu plié 50.
+
 ### Double-clic sur un objet
 
 ```ts
@@ -459,10 +512,11 @@ Toute forme est un cadre (`FrameObject`) : rectangle, ellipse ou tracé normalis
 | `src/model/images.ts` | ppi effective (`imagePpi`, `framePpi`), seuils `PPI_WARN` 250 / `PPI_ERROR` 150, `assetUsages`, `placeholderFrames`, placement (`placeImage`, `refitFrameImage`, `relinkImage`), recadrage (`constrainCover`, `zoomImageAt`, `constrainCrop`, `leavesGap`) |
 | `src/model/shapes.ts` | arcs → Bézier (`parsePath(d, { convertArcs: true })` ; sans l'option, un arc reste refusé), transformations SVG, boîte exacte (`pathBounds`), `shapeFromSvg`, `polygonPath`, contours éditables (`pathToContours` / `contoursToPath`), `frameShapePath` (contour en mm), `findShape` |
 | `src/editor/CropMode.tsx` | mode `crop` : `startCrop(frameId)`, `finishCrop(commit)` ; un seul geste, donc un seul Ctrl+Z |
-| `src/editor/dropImage.ts` + `DropImageOverlay.tsx` | `uploadImage`, `placeAssetInFrame`, `createFrameForAsset`, `frameAtPoint` ; dépôt de fichiers et de photos du panneau Images (`ASSET_DRAG_TYPE`) |
+| `src/editor/dropImage.ts` + `DropImageOverlay.tsx` | `uploadImage`, `placeAssetInFrame`, `createFrameForAsset`, `frameAtPoint` ; dépôt de fichiers et de photos du panneau Images (`ASSET_DRAG_TYPE`) ; les fichiers Word déposés sont laissés à l'import Word |
+| `server/assets.ts` | `POST /api/assets/:id` ; `storeImageAsset(documentsDir, docId, { content, displayName, uploadFile? })` : l'enregistrement d'une photo (original intact, aperçu WebP, copie PNG d'impression d'un TIFF), partagé avec l'import Word |
 | `src/editor/PenTool.tsx` | outil `pen` (P), mode `pen-edit` : `startPenEdit(frameId)` |
 | `src/editor/ShapeTool.tsx` | remplace l'outil `shape` : polygones réglables, formes du document, `importSvgShape` |
-| `src/panels/AssetsPanel.tsx` | panneau Images (ordre 50) + surcouche `ppi-badges` (`[data-ppi-badge="warn" \| "error"]`) |
+| `src/panels/AssetsPanel.tsx` | panneau Images (ordre 50) + surcouche `ppi-badges` (`[data-ppi-badge="warn" \| "error"]`) ; une photo sans cadre est « Non placée » (`[data-asset-unplaced]`) : sa vignette se glisse sur un cadre |
 | `src/panels/properties/FrameSection.tsx` | sections Forme (45) et Photo (50) |
 | `scripts/extract-pdf-images.py` | `npm run extract-pdf-images -- --pdf <fichier> --doc <id> [--fill]` : images d'un PDF (dans l'ordre où elles sont peintes, masque compris, décors de moins de 100 px écartés) → photos provisoires `provisoire-<n>.png` du document ; `--fill` garnit dans l'ordre ses cadres vides ou provisoires (pages, puis ordre d'empilement), jamais un cadre qui porte une vraie photo ; relançable |
 
@@ -519,6 +573,25 @@ pendant le geste, il coupe l'aimantation.
 - **Nouveaux champs facultatifs** : `TextStyle.spaceBefore` / `spaceAfter` (mm, entre paragraphes),
   `TextRun.characterStyleId`, `TextObject.autoHeight`. `checkIntegrity` vérifie les références de styles
   et les nuances des styles.
+- **Import Word** (champs facultatifs, rétrocompatibles) : `TextRun.underline` ; `Paragraph.spaceAfter`,
+  `leftIndent` (≥ 0) et `firstLineIndent` (mm ; négatif = retrait suspendu, `validate.ts` refuse une première ligne
+  qui sortirait du bloc), `list` ({ kind 'bullet' | 'number', level 0-8, format, suffix « . » ou « ) », start }),
+  `paragraphStyleId` (style propre d'un paragraphe, référence vérifiée) ; `ParagraphStyle.origin: 'word'`.
+- **Style propre d'un paragraphe** : `applyStyleToParagraph` écrit toutes les valeurs du style dans le paragraphe
+  (corps, interlignage, alignement, espaces : `PARAGRAPH_LEVEL_KEYS`) et ses segments (graisse, italique, nuance,
+  interlettrage, casse : `PARAGRAPH_RUN_KEYS`) ; le style du bloc ne déteint donc pas. `updateParagraphStyle` suit
+  aussi ces paragraphes, `textOverrides` n'y compte comme écarts que ce qui diffère de leur style,
+  `clearOverrides` les remet à leur style, `applyParagraphStyle` (sur le bloc) retire les styles propres,
+  `deleteParagraphStyle` les détache.
+- **Listes** (`model/lists.ts`) : `listMarkers(paragraphs)` numérote dans l'ordre de l'article (les sous-niveaux
+  repartent, un paragraphe hors liste n'interrompt pas, `start` impose) ; puces « • » puis « – ». La puce n'est pas du
+  texte : `data-list-marker` sur le paragraphe et la règle `[data-list-marker]::before` de `styles/app.css`, dans le
+  retrait suspendu (`--fl-marker-w`). Même dessin au rendu (TextFrameView, `TextFlow.markers`), dans la mesure
+  du texte chaîné (numéros de l'article entier, `StorySlice.first`) et dans l'éditeur (décorations,
+  `listMarkersPlugin`). La suite d'un paragraphe coupé entre deux blocs perd puce et retrait de première ligne.
+- **Tabulations** : le bloc est en `white-space: normal` ; chaque `\t` est dessinée dans un `span` en `pre-wrap`
+  (`tabbedParts`), taquets tous les 8 cadratins (`TAB_SIZE`, lu aussi par l'éditeur, entièrement en `pre-wrap`).
+  `breakPositions` coupe aussi après une tabulation. Souligné : `text-decoration`, marque `runUnderline`, Ctrl+U.
 - **Fine insécable U+202F** : absente d'Open Sans ; le rendu la dessine « U+2060 U+2009 U+2060 »
   (`NNBSP_RENDER`), le document garde U+202F.
 - **Mesures** : `TextFrameView` publie, à l'écran et seulement si l'éditeur écoute

@@ -11,6 +11,9 @@ InDesign — et on exporte un PDF/X-4 en CMJN prêt pour l'imprimeur.
   (fond perdu, plis).
 - **Nouveau document** depuis un gabarit : dépliant A4 pli roulé ou accordéon, A4 recto verso, flyer A5,
   carte de visite, affiche A3 — et duplication d'un document.
+- **Import Word (.docx)**, comme « Placer » dans InDesign : titres, styles, listes, gras / italique /
+  souligné, tableaux et images, dans un bloc texte, un bloc neuf, ou toutes les faces d'un document neuf
+  (remplissage automatique en blocs chaînés).
 - **Édition** : sélection, poignées, rotation, magnétisme et repères intelligents, règles et repères,
   alignement, groupes, calques (masquer, verrouiller, non imprimable), annuler / rétablir, enregistrement
   automatique, versions nommées.
@@ -47,6 +50,39 @@ npm run dev           # http://127.0.0.1:5190 (PORT=5191 npm run dev pour un aut
 
 L'accueil liste les documents du dossier `documents/` (données locales, jamais versionnées) et permet de
 créer, dupliquer ou importer un document.
+
+## Importer un fichier Word
+
+Le texte d'un fichier Word (`.docx`) se place dans le document comme avec la commande « Placer » d'InDesign.
+
+- **Dans l'éditeur** : bouton **Placer…** de la barre du haut. Choisissez le fichier et les options, puis :
+  - si un bloc texte est sélectionné, le texte du Word **remplace** le sien (toute sa chaîne s'il est chaîné) ;
+  - sinon, le curseur se « charge » : un clic sur un bloc texte en remplace le texte, un clic sur une zone vide
+    crée un **bloc neuf** à cet endroit, à la largeur de la zone de sécurité du volet et jusqu'en bas
+    (Échap annule).
+  - On peut aussi **glisser un `.docx`** depuis l'explorateur sur la page : même chose au point de dépôt, avec
+    les dernières options choisies.
+- **Depuis l'accueil** : **Nouveau document depuis Word** — fichier, nom, gabarit. Le document est créé et le
+  texte remplit toutes ses faces, volet par volet.
+- **Remplir automatiquement** (option) : si le texte déborde, des blocs chaînés sont créés dans la zone de
+  sécurité des volets suivants, puis des faces suivantes, jusqu'à ce que tout tienne ou que le document soit
+  plein ; le texte restant est signalé (« + » rouge et rapport).
+- **Typographie française** (option, cochée par défaut) : espaces insécables, apostrophes courbes, guillemets.
+- **Styles** : chaque style Word (Titre, Titre 1 à 6, Normal, Citation, Paragraphe de liste…) devient le style
+  de paragraphe du document **de même nom** — réutilisé s'il existe, sinon créé sur une échelle de tailles
+  fondée sur le style de corps du document, et marqué « Word » dans le panneau Styles. Gras, italique et
+  souligné sont gardés ; les **polices et couleurs de Word sont ignorées** (Open Sans et nuancier du
+  document), avec un avertissement.
+- **Listes** : puces et numéros dessinés dans un vrai retrait suspendu ; ajouter un élément renumérote la suite.
+- **Tableaux** : une ligne par paragraphe, cellules séparées par des tabulations (avertissement : à remettre en
+  forme). **Liens** : le texte reste, l'adresse est dans le rapport.
+- **Images** : enregistrées comme des photos déposées (originaux intacts, aperçus), listées « Non placée » dans
+  le panneau **Images** : glissez-les sur un cadre.
+- Tout se fait en **une seule étape d'annulation** (Ctrl+Z retire texte, blocs, styles et images ajoutés). Un
+  **rapport** récapitule : paragraphes, blocs, styles créés ou réutilisés, images, liens, avertissements, texte
+  en excès.
+- Refusés, avec un message clair : `.doc` (Word 97-2003 : l'enregistrer en `.docx`), fichier protégé par mot de
+  passe, fichier qui n'est pas un Word, fichier de plus de 50 Mo ou anormalement gros une fois décompressé.
 
 ## En ligne de commande
 

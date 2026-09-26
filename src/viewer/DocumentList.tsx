@@ -1,8 +1,9 @@
-import { Copy, FilePlus2, Plus } from 'lucide-react';
+import { Copy, FilePlus2, FileText, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../components/ui/button';
 import { DuplicateDocumentDialog, NewDocumentDialog, openDocument } from './DocumentDialogs';
 import { ImportDesignButton } from './ImportDesignButton';
+import { NewFromWordDialog } from './NewFromWordDialog';
 
 interface DocumentSummary {
   id: string;
@@ -14,12 +15,14 @@ const dateFormat = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeS
 
 /**
  * Page d'accueil : les documents du dossier documents/ (éditeur, visionneuse, impression, duplication), et la
- * création d'un document vierge d'après un gabarit ou par import d'un design Claude Design.
+ * création d'un document vierge d'après un gabarit, rempli d'un fichier Word, ou par import d'un design
+ * Claude Design.
  */
 export function DocumentList() {
   const [docs, setDocs] = useState<DocumentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [fromWord, setFromWord] = useState(false);
   const [duplicating, setDuplicating] = useState<DocumentSummary | null>(null);
 
   useEffect(() => {
@@ -39,6 +42,12 @@ export function DocumentList() {
       Nouveau document
     </Button>
   );
+  const wordButton = (
+    <Button variant="outline" onClick={() => setFromWord(true)} data-action="new-from-word">
+      <FileText />
+      Nouveau document depuis Word
+    </Button>
+  );
   // Rendu une seule fois (en-tête, ou invitation de la liste vide) : il porte sa propre boîte de dialogue.
   const importButton = <ImportDesignButton onImported={openDocument} />;
 
@@ -47,8 +56,9 @@ export function DocumentList() {
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">Fluidprint</h1>
         {!empty && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {importButton}
+            {wordButton}
             {newButton}
           </div>
         )}
@@ -60,10 +70,11 @@ export function DocumentList() {
           <FilePlus2 className="size-8 text-neutral-400" aria-hidden="true" />
           <p className="font-semibold">Aucun document</p>
           <p className="max-w-md text-sm text-neutral-500">
-            Créez un document à partir d’un format (dépliant, flyer, carte de visite, affiche…), ou importez un design réalisé dans Claude Design.
+            Créez un document à partir d’un format (dépliant, flyer, carte de visite, affiche…), remplissez-le d’un fichier Word, ou importez un design réalisé dans Claude Design.
           </p>
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
             {newButton}
+            {wordButton}
             {importButton}
           </div>
         </div>
@@ -96,6 +107,7 @@ export function DocumentList() {
         </ul>
       )}
       <NewDocumentDialog open={creating} onOpenChange={setCreating} />
+      <NewFromWordDialog open={fromWord} onOpenChange={setFromWord} />
       {duplicating && <DuplicateDocumentDialog key={duplicating.id} source={duplicating} onClose={() => setDuplicating(null)} />}
     </main>
   );

@@ -6,3 +6,4 @@ import '../../text/TypographyDialog';
 import '../MasterPages';
 import '../../panels/ExportDialog';
 import '../PrintPreview';
+import '../../word/PlaceWord';

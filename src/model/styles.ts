@@ -7,8 +7,13 @@
 // `textOverrides`. Modifier un style ne réécrit que les valeurs égales à l'ANCIENNE valeur du style :
 // une retouche locale survit au changement de style.
 //
+// Un paragraphe peut avoir son propre style (`Paragraph.paragraphStyleId`, intertitre d'un texte importé de
+// Word) : les valeurs du style y sont TOUTES écrites, au niveau du paragraphe (corps, interlignage,
+// alignement, espaces) et de chacun de ses segments (graisse, italique, nuance, interlettrage, casse). Le
+// style du bloc ne déteint donc jamais sur lui, et le rendu n'a rien de plus à savoir.
+//
 // Toutes les fonctions qui modifient travaillent sur un brouillon (Immer) ou un document mutable.
-import type { CharacterStyle, Id, LayoutDocument, ParagraphStyle, TextObject, TextRun, TextStyle } from './types';
+import type { CharacterStyle, Id, LayoutDocument, Paragraph, ParagraphStyle, TextObject, TextRun, TextStyle } from './types';
 
 export const PARAGRAPH_STYLE_KEYS = [
   'fontFamily',
@@ -26,10 +31,15 @@ export const PARAGRAPH_STYLE_KEYS = [
 ] as const satisfies readonly (keyof TextStyle)[];
 
 export type CharacterStyleValues = CharacterStyle['style'];
-export const CHARACTER_STYLE_KEYS = ['color', 'fontWeight', 'italic', 'fontSize', 'letterSpacing', 'transform'] as const satisfies readonly (keyof CharacterStyleValues)[];
+export const CHARACTER_STYLE_KEYS = ['color', 'fontWeight', 'italic', 'fontSize', 'letterSpacing', 'transform', 'underline'] as const satisfies readonly (keyof CharacterStyleValues)[];
 
 /** Surcharges de paragraphe du modèle (`Paragraph`), comptées comme écarts. */
-const PARAGRAPH_OVERRIDE_KEYS = ['fontSize', 'lineHeight', 'align', 'spaceBefore'] as const;
+const PARAGRAPH_OVERRIDE_KEYS = ['fontSize', 'lineHeight', 'align', 'spaceBefore', 'spaceAfter'] as const;
+
+/** Valeurs d'un style propre à un paragraphe écrites dans le paragraphe (`Paragraph`). */
+export const PARAGRAPH_LEVEL_KEYS = ['fontSize', 'lineHeight', 'align', 'spaceBefore', 'spaceAfter'] as const satisfies readonly (keyof TextStyle & keyof Paragraph)[];
+/** Valeurs d'un style propre à un paragraphe écrites dans chacun de ses segments (`TextRun`). */
+export const PARAGRAPH_RUN_KEYS = ['fontWeight', 'italic', 'color', 'letterSpacing', 'transform'] as const satisfies readonly (keyof TextStyle & keyof TextRun)[];
 
 export const STYLE_KEY_LABELS: Record<string, string> = {
   fontFamily: 'police',
@@ -44,6 +54,7 @@ export const STYLE_KEY_LABELS: Record<string, string> = {
   spaceAfter: 'espace après',
   align: 'alignement',
   textWrap: 'coupure',
+  underline: 'soulignement',
 };
 
 /** Égalité de deux valeurs de style ; `italic` absent vaut « non ». */
@@ -95,10 +106,62 @@ export interface TextOverride {
 
 const fmt = (v: unknown): string => (typeof v === 'number' ? String(Math.round(v * 1000) / 1000).replace('.', ',') : typeof v === 'object' ? ((v as { swatch?: string }).swatch ?? JSON.stringify(v)) : String(v));
 
-/** Valeurs d'un segment qui ne viennent pas de son style de caractère (mise en forme locale). */
-export function runLocalKeys(doc: Pick<LayoutDocument, 'styles'>, run: TextRun): (typeof CHARACTER_STYLE_KEYS)[number][] {
+/** Valeur qu'un style propre écrit dans un paragraphe (espaces absents du style : 0, pour ne rien hériter du bloc). */
+function paragraphLevelValue(ps: ParagraphStyle, key: (typeof PARAGRAPH_LEVEL_KEYS)[number]): unknown {
+  const value = ps.style[key];
+  return value === undefined && (key === 'spaceBefore' || key === 'spaceAfter') ? 0 : value;
+}
+
+/** Valeur qu'un style propre écrit dans chaque segment (italique toujours explicite). */
+function paragraphRunValue(ps: ParagraphStyle, key: (typeof PARAGRAPH_RUN_KEYS)[number]): unknown {
+  return key === 'italic' ? !!ps.style.italic : ps.style[key];
+}
+
+/**
+ * Valeurs d'un segment qui ne viennent ni de son style de caractère, ni du style propre de son paragraphe
+ * (`own`) : sa mise en forme locale.
+ */
+export function runLocalKeys(doc: Pick<LayoutDocument, 'styles'>, run: TextRun, own?: ParagraphStyle): (typeof CHARACTER_STYLE_KEYS)[number][] {
   const cs = findCharacterStyle(doc, run.characterStyleId);
-  return CHARACTER_STYLE_KEYS.filter((k) => run[k] !== undefined && !(cs && cs.style[k] !== undefined && sameStyleValue(k, run[k], cs.style[k])));
+  return CHARACTER_STYLE_KEYS.filter((k) => {
+    if (run[k] === undefined) return false;
+    if (cs && cs.style[k] !== undefined && sameStyleValue(k, run[k], cs.style[k])) return false;
+    if (own && (PARAGRAPH_RUN_KEYS as readonly string[]).includes(k) && sameStyleValue(k, run[k], paragraphRunValue(own, k as (typeof PARAGRAPH_RUN_KEYS)[number]))) return false;
+    return true;
+  });
+}
+
+// ---------------------------------------------------------------- style propre d'un paragraphe
+
+/**
+ * Donne à un paragraphe son propre style : toutes les valeurs du style y sont écrites (paragraphe et
+ * segments), sauf celles qu'un style de caractère fixe. `first` : premier paragraphe de l'article, qui n'a
+ * jamais d'espace avant (comme en haut d'un bloc).
+ */
+export function applyStyleToParagraph(doc: Pick<LayoutDocument, 'styles'>, para: Paragraph, ps: ParagraphStyle, options: { first?: boolean } = {}): void {
+  para.paragraphStyleId = ps.id;
+  for (const key of PARAGRAPH_LEVEL_KEYS) {
+    if (key === 'spaceBefore' && options.first) delete para.spaceBefore;
+    else setOrDelete(para, key, paragraphLevelValue(ps, key));
+  }
+  for (const run of para.runs) {
+    const cs = findCharacterStyle(doc, run.characterStyleId);
+    for (const key of PARAGRAPH_RUN_KEYS) {
+      if (cs && cs.style[key] !== undefined) continue;
+      setOrDelete(run, key, paragraphRunValue(ps, key));
+    }
+  }
+}
+
+/** Retire le style propre d'un paragraphe : il reprend celui du bloc (ses retouches locales restent). */
+function clearParagraphStyle(doc: Pick<LayoutDocument, 'styles'>, para: Paragraph): void {
+  const own = findParagraphStyle(doc, para.paragraphStyleId);
+  delete para.paragraphStyleId;
+  if (!own) return;
+  for (const key of PARAGRAPH_LEVEL_KEYS) if (para[key] !== undefined && sameStyleValue(key, para[key], paragraphLevelValue(own, key))) delete para[key];
+  for (const run of para.runs) {
+    for (const key of PARAGRAPH_RUN_KEYS) if (run[key] !== undefined && sameStyleValue(key, run[key], paragraphRunValue(own, key))) delete run[key];
+  }
 }
 
 /** Écarts d'un bloc par rapport à son style de paragraphe (vide s'il n'a pas de style). */
@@ -110,11 +173,15 @@ export function textOverrides(doc: Pick<LayoutDocument, 'styles'>, obj: TextObje
     if (!sameStyleValue(key, obj.style[key], ps.style[key])) out.push({ level: 'bloc', key, label: `${STYLE_KEY_LABELS[key]} ${fmt(obj.style[key])}` });
   }
   obj.paragraphs.forEach((para, p) => {
+    const own = findParagraphStyle(doc, para.paragraphStyleId);
     for (const key of PARAGRAPH_OVERRIDE_KEYS) {
-      if (para[key] !== undefined) out.push({ level: 'paragraphe', key, label: `${STYLE_KEY_LABELS[key]} ${fmt(para[key])} (paragraphe ${p + 1})` });
+      if (para[key] === undefined) continue;
+      // Paragraphe à style propre : seule une valeur différente de ce style est un écart.
+      if (own && sameStyleValue(key, para[key], paragraphLevelValue(own, key))) continue;
+      out.push({ level: 'paragraphe', key, label: `${STYLE_KEY_LABELS[key]} ${fmt(para[key])} (paragraphe ${p + 1})` });
     }
     for (const run of para.runs) {
-      for (const key of runLocalKeys(doc, run)) {
+      for (const key of runLocalKeys(doc, run, own)) {
         const excerpt = run.text.trim().slice(0, 18);
         out.push({ level: 'segment', key, label: `${STYLE_KEY_LABELS[key]} ${fmt(run[key])} (« ${excerpt}${run.text.trim().length > 18 ? '…' : ''} »)` });
       }
@@ -149,10 +216,23 @@ export function updateParagraphStyle(doc: LayoutDocument, styleId: Id, patch: Pa
   for (const [key, value] of Object.entries(patch)) setOrDelete(ps.style, key, value);
   const changed = PARAGRAPH_STYLE_KEYS.filter((k) => !sameStyleValue(k, before[k], ps.style[k]));
   if (!changed.length) return;
+  const old: ParagraphStyle = { ...ps, style: before };
   for (const obj of textObjects(doc)) {
-    if (obj.paragraphStyleId !== styleId) continue;
-    for (const key of changed) {
-      if (sameStyleValue(key, obj.style[key], before[key])) setOrDelete(obj.style, key, ps.style[key]);
+    if (obj.paragraphStyleId === styleId) {
+      for (const key of changed) {
+        if (sameStyleValue(key, obj.style[key], before[key])) setOrDelete(obj.style, key, ps.style[key]);
+      }
+    }
+    // Paragraphes à style propre : même règle, valeur par valeur, dans le paragraphe et ses segments.
+    for (const para of obj.paragraphs) {
+      if (para.paragraphStyleId !== styleId) continue;
+      for (const key of PARAGRAPH_LEVEL_KEYS) {
+        if (changed.includes(key) && para[key] !== undefined && sameStyleValue(key, para[key], paragraphLevelValue(old, key))) setOrDelete(para, key, paragraphLevelValue(ps, key));
+      }
+      for (const key of PARAGRAPH_RUN_KEYS) {
+        if (!changed.includes(key)) continue;
+        for (const run of para.runs) if (sameStyleValue(key, run[key], paragraphRunValue(old, key))) setOrDelete(run, key, paragraphRunValue(ps, key));
+      }
     }
   }
 }
@@ -167,6 +247,8 @@ export function applyParagraphStyle(doc: LayoutDocument, ids: Id[], styleId: Id 
     }
     obj.paragraphStyleId = ps.id;
     for (const key of PARAGRAPH_STYLE_KEYS) setOrDelete(obj.style, key, ps.style[key]);
+    // Appliqué au bloc, le style vaut pour tous ses paragraphes : les styles propres (intertitres Word) partent.
+    for (const para of obj.paragraphs) if (para.paragraphStyleId) clearParagraphStyle(doc, para);
   }
 }
 
@@ -176,10 +258,17 @@ export function clearOverrides(doc: LayoutDocument, ids: Id[]): void {
     const ps = findParagraphStyle(doc, obj.paragraphStyleId);
     if (!ps) continue;
     for (const key of PARAGRAPH_STYLE_KEYS) setOrDelete(obj.style, key, ps.style[key]);
-    for (const para of obj.paragraphs) {
+    obj.paragraphs.forEach((para, p) => {
+      const own = findParagraphStyle(doc, para.paragraphStyleId);
+      if (own) {
+        // Un paragraphe à style propre reprend exactement ce style (ses segments aussi).
+        for (const run of para.runs) for (const key of runLocalKeys(doc, run, own)) delete run[key];
+        applyStyleToParagraph(doc, para, own, { first: p === 0 });
+        return;
+      }
       for (const key of PARAGRAPH_OVERRIDE_KEYS) delete para[key];
       for (const run of para.runs) for (const key of runLocalKeys(doc, run)) delete run[key];
-    }
+    });
   }
 }
 
@@ -200,13 +289,20 @@ export function renameStyle(doc: LayoutDocument, kind: 'paragraph' | 'character'
 /** Supprime un style de paragraphe : ses blocs gardent leur mise en forme, sans référence. */
 export function deleteParagraphStyle(doc: LayoutDocument, id: Id): void {
   doc.styles.paragraph = doc.styles.paragraph.filter((s) => s.id !== id);
-  for (const obj of textObjects(doc)) if (obj.paragraphStyleId === id) delete obj.paragraphStyleId;
+  for (const obj of textObjects(doc)) {
+    if (obj.paragraphStyleId === id) delete obj.paragraphStyleId;
+    // Les paragraphes à ce style propre gardent leur mise en forme (écrite chez eux), sans référence.
+    for (const para of obj.paragraphs) if (para.paragraphStyleId === id) delete para.paragraphStyleId;
+  }
 }
 
-/** Nombre de blocs qui suivent chaque style de paragraphe. */
+/** Nombre de blocs qui suivent chaque style de paragraphe (en entier, ou par l'un de leurs paragraphes). */
 export function paragraphStyleUsage(doc: LayoutDocument): Map<Id, number> {
   const usage = new Map<Id, number>();
-  for (const obj of textObjects(doc)) if (obj.paragraphStyleId) usage.set(obj.paragraphStyleId, (usage.get(obj.paragraphStyleId) ?? 0) + 1);
+  for (const obj of textObjects(doc)) {
+    const ids = new Set([obj.paragraphStyleId, ...obj.paragraphs.map((p) => p.paragraphStyleId)].filter((id): id is Id => !!id));
+    for (const id of ids) usage.set(id, (usage.get(id) ?? 0) + 1);
+  }
   return usage;
 }
 

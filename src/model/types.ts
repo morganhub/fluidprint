@@ -191,8 +191,28 @@ export interface TextRun {
   fontSize?: Pt;
   letterSpacing?: number;
   transform?: TextTransform;
+  /** Souligné (import Word). */
+  underline?: boolean;
   /** Style de caractère nommé ; les champs ci-dessus restent les valeurs effectives (dénormalisées). */
   characterStyleId?: Id;
+}
+
+export type ListNumberFormat = 'decimal' | 'lower-alpha' | 'upper-alpha' | 'lower-roman' | 'upper-roman';
+
+/**
+ * Paragraphe d'une liste (import Word) : la puce ou le numéro est DESSINÉ dans le retrait suspendu du
+ * paragraphe (`firstLineIndent` négatif), il ne fait pas partie du texte. Les numéros se calculent dans
+ * l'ordre de l'article (model/lists.ts) : ajouter un élément renumérote les suivants.
+ */
+export interface ParagraphList {
+  kind: 'bullet' | 'number';
+  /** Niveau d'imbrication : 0 = premier niveau. */
+  level: number;
+  /** Numérotation : format du numéro (décimal par défaut) et signe qui le suit (« . » par défaut). */
+  format?: ListNumberFormat;
+  suffix?: '.' | ')';
+  /** Numéro imposé à ce paragraphe (liste qui repart) ; sinon il suit le précédent du même niveau. */
+  start?: number;
 }
 
 export interface Paragraph {
@@ -203,6 +223,19 @@ export interface Paragraph {
   align?: TextAlign;
   /** Espace au-dessus du paragraphe, en mm. */
   spaceBefore?: Mm;
+  /** Espace sous le paragraphe (sauf le dernier du bloc), en mm. */
+  spaceAfter?: Mm;
+  /** Retrait gauche de tout le paragraphe, en mm. */
+  leftIndent?: Mm;
+  /** Retrait de la première ligne par rapport au retrait gauche, en mm ; négatif : retrait suspendu (puces). */
+  firstLineIndent?: Mm;
+  list?: ParagraphList;
+  /**
+   * Style de paragraphe propre à ce paragraphe quand il diffère de celui du bloc (un intertitre dans un
+   * texte importé de Word). Comme pour un bloc, c'est une référence : les valeurs effectives du style sont
+   * recopiées dans les surcharges du paragraphe et dans ses segments (voir model/styles.ts).
+   */
+  paragraphStyleId?: Id;
 }
 
 export interface TextObject extends BaseObject {
@@ -363,6 +396,8 @@ export interface ParagraphStyle {
   id: Id;
   name: string;
   style: TextStyle;
+  /** Créé par l'import d'un fichier Word (même nom que le style Word). */
+  origin?: 'word';
 }
 
 export interface CharacterStyle {

@@ -9,6 +9,7 @@ import { frameShapePath } from '../model/shapes';
 import type { FrameObject, Id } from '../model/types';
 import { getEditor, useEditor } from '../store/documentStore';
 import { pageIdOf } from '../store/tree';
+import { carriesOnlyWordFiles, isWordFile } from '../word/client';
 import { ACCEPTED_LABEL, ASSET_DRAG_TYPE, createFrameForAsset, frameAtPoint, isAcceptedImage, placeAssetInFrame, uploadImage } from './dropImage';
 import { pageBoxToScreen, screenToWorld, worldToPage } from './layout';
 import { registerOverlay } from './registry/api';
@@ -108,7 +109,8 @@ function DropImageOverlay() {
 
     const over = (e: DragEvent) => {
       const s = getEditor();
-      if (!carriesImage(e.dataTransfer)) return;
+      // Un fichier Word se place comme du texte (word/PlaceWord.tsx) : pas de cadre à surligner.
+      if (!carriesImage(e.dataTransfer) || carriesOnlyWordFiles(e.dataTransfer)) return;
       e.preventDefault();
       if (!s.doc || s.mode) {
         e.dataTransfer!.dropEffect = 'none';
@@ -143,7 +145,10 @@ function DropImageOverlay() {
         return;
       }
 
-      const files = [...(e.dataTransfer!.files ?? [])];
+      const all = [...(e.dataTransfer!.files ?? [])];
+      const files = all.filter((f) => !isWordFile(f));
+      // Fichiers Word seulement : c'est l'import Word qui les place.
+      if (all.length && !files.length) return;
       const accepted = files.filter(isAcceptedImage);
       if (!accepted.length) {
         show('error', files.length ? `Format refusé (${files.map((f) => f.name).join(', ')}) : ${ACCEPTED_LABEL} attendu` : 'Aucun fichier reçu');

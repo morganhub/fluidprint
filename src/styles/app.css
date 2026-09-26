@@ -47,3 +47,18 @@
   border: 1px solid #1f7ae0 !important;
   background: rgba(31, 122, 224, 0.08) !important;
 }
+
+/*
+ * Puces et numéros des listes (paragraphes `list`, import Word) : dessinés dans le retrait suspendu du
+ * paragraphe (`text-indent` négatif, largeur dans --fl-marker-w), hors du texte. Même règle pour le rendu,
+ * l'éditeur de texte, la mesure du texte chaîné et la route d'impression.
+ */
+[data-list-marker]::before {
+  content: attr(data-list-marker);
+  display: inline-block;
+  min-width: var(--fl-marker-w, 1.5em);
+  /* Le retrait de première ligne ne s'applique qu'au texte : sans cela, il décalerait aussi la puce. */
+  text-indent: 0;
+  text-decoration: none;
+  white-space: nowrap;
+}

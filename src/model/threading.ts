@@ -80,8 +80,9 @@ export function storyEnd(paras: Paragraph[]): StoryPos {
 
 /**
  * Coupures possibles entre deux blocs, dans l'ordre : début de chaque paragraphe, après une suite
- * d'espaces, après un retour à la ligne forcé et après un trait d'union ou une barre oblique (là où le
- * navigateur peut lui aussi passer à la ligne). Les insécables (U+00A0, U+202F) ne sont jamais des coupures.
+ * d'espaces ou de tabulations, après un retour à la ligne forcé et après un trait d'union ou une barre
+ * oblique (là où le navigateur peut lui aussi passer à la ligne). Les insécables (U+00A0, U+202F) ne sont
+ * jamais des coupures.
  */
 export function breakPositions(paras: Paragraph[]): StoryPos[] {
   const out: StoryPos[] = [];
@@ -91,7 +92,7 @@ export function breakPositions(paras: Paragraph[]): StoryPos[] {
     for (let i = 0; i < text.length; i++) {
       const c = text[i];
       const next = text[i + 1];
-      if ((c === ' ' || c === '\n') && next !== ' ' && next !== '\n' && next !== undefined) out.push({ p, offset: i + 1 });
+      if ((c === ' ' || c === '\n' || c === '\t') && next !== ' ' && next !== '\n' && next !== '\t' && next !== undefined) out.push({ p, offset: i + 1 });
       else if ((c === '-' || c === '/') && next !== undefined && /[\p{L}\p{N}]/u.test(next) && i > 0 && /[\p{L}\p{N}]/u.test(text[i - 1])) out.push({ p, offset: i + 1 });
     }
   });
@@ -117,12 +118,16 @@ function sliceRuns(runs: TextRun[], from: number, to: number): TextRun[] {
 /**
  * Morceau d'article entre deux positions (fin exclue ; null = jusqu'au bout). Un paragraphe coupé en
  * tête garde sa mise en forme mais perd son espace avant (c'est la suite d'un paragraphe, ou le haut
- * d'un bloc) ; un paragraphe coupé en fin est marqué `continues` (dernière ligne justifiée comme les autres).
+ * d'un bloc) ; la suite d'un paragraphe coupé perd aussi sa puce et son retrait de première ligne (sa
+ * première ligne n'est pas celle du paragraphe). Un paragraphe coupé en fin est marqué `continues`
+ * (dernière ligne justifiée comme les autres).
  */
 export interface StorySlice {
   paragraphs: Paragraph[];
   /** Vrai si le dernier paragraphe continue dans le bloc suivant. */
   continues: boolean;
+  /** Rang, dans l'article, du premier paragraphe du morceau (numéros des listes). */
+  first: number;
 }
 
 export function sliceStory(paras: Paragraph[], from: StoryPos, to: StoryPos | null): StorySlice {
@@ -139,10 +144,14 @@ export function sliceStory(paras: Paragraph[], from: StoryPos, to: StoryPos | nu
     const runs = a === 0 && b === len ? para.runs.map((r) => ({ ...r })) : sliceRuns(para.runs, a, b);
     const piece: Paragraph = { ...para, runs: runs.length ? runs : [{ text: '' }] };
     if (out.length === 0) delete piece.spaceBefore;
+    if (a > 0) {
+      delete piece.list;
+      delete piece.firstLineIndent;
+    }
     out.push(piece);
     if (p === end.p && to && b < len) continues = true;
   }
-  return { paragraphs: out, continues };
+  return { paragraphs: out, continues, first: from.p };
 }
 
 // ---------------------------------------------------------------- modifications (sur un brouillon)

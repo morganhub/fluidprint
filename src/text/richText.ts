@@ -1,8 +1,8 @@
 // Conversion entre le modèle (paragraphes et segments) et le document Tiptap (JSON ProseMirror).
 //
 // Correspondance :
-// - un `Paragraph` = un nœud `paragraph` ; ses surcharges (corps, interlignage, alignement, espace
-//   avant) sont des attributs du nœud ;
+// - un `Paragraph` = un nœud `paragraph` ; ses surcharges (corps, interlignage, alignement, espaces
+//   avant et après, retraits, liste, style de paragraphe propre) sont des attributs du nœud ;
 // - un segment = du texte portant une marque par champ défini (nuance, graisse, italique, corps,
 //   interlettrage, casse, style de caractère) : couper, fusionner ou retaper un segment garde ses champs,
 //   donc « pour vous. » reste bleu ;
@@ -33,6 +33,7 @@ export const RUN_MARKS = {
   fontSize: 'runSize',
   letterSpacing: 'runTracking',
   transform: 'runCase',
+  underline: 'runUnderline',
   characterStyleId: 'charStyle',
 } as const satisfies Record<Exclude<keyof TextRun, 'text'>, string>;
 
@@ -41,7 +42,7 @@ const RUN_KEYS = Object.keys(RUN_MARKS) as RunKey[];
 const MARK_TO_KEY = Object.fromEntries(RUN_KEYS.map((k) => [RUN_MARKS[k], k])) as Record<string, RunKey>;
 
 /** Attributs de paragraphe conservés par l'éditeur. */
-export const PARAGRAPH_ATTRS = ['fontSize', 'lineHeight', 'align', 'spaceBefore'] as const;
+export const PARAGRAPH_ATTRS = ['fontSize', 'lineHeight', 'align', 'spaceBefore', 'spaceAfter', 'leftIndent', 'firstLineIndent', 'list', 'paragraphStyleId'] as const;
 
 type RunAttrs = Omit<TextRun, 'text'>;
 
@@ -64,7 +65,7 @@ export function paragraphsToDoc(paragraphs: Paragraph[]): JsonNode {
     type: 'doc',
     content: paragraphs.map((para) => {
       const attrs: Record<string, unknown> = {};
-      for (const key of PARAGRAPH_ATTRS) attrs[key] = para[key] ?? null;
+      for (const key of PARAGRAPH_ATTRS) attrs[key] = para[key] === undefined ? null : structuredClone(para[key]);
       const content: JsonNode[] = [];
       for (const run of para.runs) {
         const { text, ...rest } = run;

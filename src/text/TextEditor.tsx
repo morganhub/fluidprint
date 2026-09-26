@@ -10,7 +10,7 @@
 // - Sortie : Échap, bouton « Terminé », ou clic hors du bloc et de sa barre.
 // - spellcheck et lang="fr" ne sont posés QUE sur ce bloc en édition : le rendu et l'export n'en ont pas.
 import { EditorContent, useEditor as useTiptap, useEditorState, type Editor } from '@tiptap/react';
-import { Bold, Check, Italic } from 'lucide-react';
+import { Bold, Check, Italic, Underline } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
@@ -30,7 +30,7 @@ import { chainFrames, chainHead } from '../model/threading';
 import { wrapIndex } from '../model/wrap';
 import { getEditor, useEditor, useEditorShallow } from '../store/documentStore';
 import { isSelectable, objectBounds, pageIdOf } from '../store/tree';
-import { effectiveValue, setRunValues, textEditorExtensions, type RunValueChange, type TextEditContext } from './extensions';
+import { effectiveValue, setRunValues, SPACE_AFTER_VAR, textEditorExtensions, type RunValueChange, type TextEditContext } from './extensions';
 import { setTextHeight } from './autoHeight';
 import { docToParagraphs, paragraphsToDoc, sameParagraphs } from './richText';
 
@@ -210,7 +210,8 @@ function TextEditorBox({ obj, doc, zoom, options }: { obj: TextObject; doc: Layo
     `${scope} { white-space: pre-wrap; overflow-wrap: normal; line-break: auto; outline: none; ${obj.verticalAlign && obj.verticalAlign !== 'top' ? '' : 'min-height: 100%;'} }`,
     `${scope} p { margin: 0; }`,
     s.spaceBefore !== undefined ? `${scope} p + p { margin-top: ${s.spaceBefore}mm; }` : '',
-    s.spaceAfter !== undefined ? `${scope} p:not(:last-child) { margin-bottom: ${s.spaceAfter}mm; }` : '',
+    // Espace après : celui du paragraphe (variable posée par son attribut), sinon celui du bloc ; jamais sous le dernier.
+    `${scope} p:not(:last-child) { margin-bottom: var(${SPACE_AFTER_VAR}, ${s.spaceAfter ?? 0}mm); }`,
     `${scope} [data-nnbsp] { white-space: normal; }`,
   ].join('\n');
 
@@ -286,6 +287,7 @@ function TextEditToolbar() {
       return {
         bold: typeof weight === 'number' && weight >= 600,
         italic: effectiveValue(ed.state, 'italic', !!block.italic) === true,
+        underline: effectiveValue(ed.state, 'underline', false) === true,
         color: effectiveValue(ed.state, 'color', block.color) as ColorRef | null,
         charStyle: effectiveValue(ed.state, 'characterStyleId', null) as string | null,
       };
@@ -339,6 +341,18 @@ function TextEditToolbar() {
         onClick={() => apply([{ key: 'italic', value: !state.italic, block: !!block.italic }])}
       >
         <Italic />
+      </Button>
+      <Button
+        variant="toggle"
+        size="icon-sm"
+        aria-label="Souligné (Ctrl+U)"
+        title="Souligné (Ctrl+U)"
+        data-action="text-underline"
+        aria-pressed={state.underline}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => apply([{ key: 'underline', value: !state.underline, block: false }])}
+      >
+        <Underline />
       </Button>
       <span className="mx-1 h-5 w-px bg-neutral-200" />
       <ToolbarSwatches doc={doc} value={state.color} onPick={(ref) => apply([{ key: 'color', value: ref, block: block.color }])} />

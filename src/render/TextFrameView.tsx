@@ -2,7 +2,7 @@ import { Fragment, useLayoutEffect, useRef, type CSSProperties } from 'react';
 import type { TextObject } from '../model/types';
 import { boxStyle, objAttrs } from './box';
 import { useRender } from './context';
-import { paragraphCss, renderNnbsp, runCss, textBlockCss, wrapFloatCss } from './textCss';
+import { markerAttrs, paragraphCss, renderNnbsp, runCss, TAB_CSS, tabbedParts, textBlockCss, wrapFloatCss } from './textCss';
 import { useTextFlow } from './textFlow';
 import { hasTextMeasureListeners, measureTextElement, reportTextMeasurement } from './textMetrics';
 
@@ -11,10 +11,18 @@ import { hasTextMeasureListeners, measureTextElement, reportTextMeasurement } fr
 export { NNBSP_RENDER, paragraphCss, runCss, textBlockCss } from './textCss';
 
 function RunText({ text }: { text: string }) {
-  return text.split('\n').map((part, i) => (
+  return text.split('\n').map((line, i) => (
     <Fragment key={i}>
       {i > 0 && <br />}
-      {renderNnbsp(part)}
+      {tabbedParts(line).map((part, j) =>
+        part === '\t' ? (
+          <span key={j} data-tab="" style={TAB_CSS}>
+            {'\t'}
+          </span>
+        ) : (
+          <Fragment key={j}>{renderNnbsp(part)}</Fragment>
+        ),
+      )}
     </Fragment>
   ));
 }
@@ -23,7 +31,8 @@ function RunText({ text }: { text: string }) {
  * Bloc texte en HTML (contrat, point 2) : le moteur de Chrome fait les coupures, à l'écran comme au PDF.
  * Un bloc chaîné (4.12) affiche sa part de l'article, dans la mise en forme du premier bloc ; un bloc
  * habillé (4.13) commence par ses flottants `shape-outside`, et reste alors aligné en haut (un flottant
- * dans une boîte flexible ne flotte plus).
+ * dans une boîte flexible ne flotte plus). Les puces et numéros des listes sont dessinés par CSS
+ * (`data-list-marker`), hors du texte.
  */
 export function TextFrameView({ obj }: { obj: TextObject }) {
   const { doc, mode } = useRender();
@@ -54,7 +63,7 @@ export function TextFrameView({ obj }: { obj: TextObject }) {
     <div ref={ref} {...objAttrs(obj)} {...(flow.chained ? { 'data-chained': '' } : null)} style={style}>
       {[flow.floats?.left, flow.floats?.right].map((f) => f && <div key={f.side} data-wrap-float={f.side} style={wrapFloatCss(f)} />)}
       {paragraphs.map((para, i) => (
-        <div key={i} style={paragraphCss(para, i, count, flow.style, flow.continues)}>
+        <div key={i} {...markerAttrs(flow.markers[i])} style={paragraphCss(para, i, count, flow.style, flow.continues)}>
           {para.runs.some((r) => r.text !== '') ? (
             para.runs.map((run, j) => (
               <span key={j} style={runCss(run, doc)}>

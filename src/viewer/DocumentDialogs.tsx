@@ -53,7 +53,7 @@ function TemplateDiagram({ template }: { template: TemplateSummary }) {
   );
 }
 
-function TemplateCard({ template, selected, onSelect }: { template: TemplateSummary; selected: boolean; onSelect(): void }) {
+export function TemplateCard({ template, selected, onSelect }: { template: TemplateSummary; selected: boolean; onSelect(): void }) {
   return (
     <button
       type="button"
@@ -79,17 +79,14 @@ function TemplateCard({ template, selected, onSelect }: { template: TemplateSumm
   );
 }
 
-/** « Nouveau document » : nom, gabarit (cartes), Créer → ouvre le document dans l'éditeur. */
-export function NewDocumentDialog({ open, onOpenChange }: { open: boolean; onOpenChange(open: boolean): void }) {
+/**
+ * Gabarits (GET /api/templates) et gabarit choisi, chargés à la première ouverture d'une boîte : la liste
+ * ne change pas en cours de session. Partagé par « Nouveau document » et « Nouveau document depuis Word ».
+ */
+export function useTemplateChoice(open: boolean) {
   const [templates, setTemplates] = useState<TemplateSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [name, setName] = useState('');
   const [templateId, setTemplateId] = useState(DEFAULT_TEMPLATE_ID);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const nameInput = useRef<HTMLInputElement>(null);
-
-  // Chargés à la première ouverture seulement : la liste des gabarits ne change pas en cours de session.
   useEffect(() => {
     if (!open || templates) return;
     let cancelled = false;
@@ -109,6 +106,36 @@ export function NewDocumentDialog({ open, onOpenChange }: { open: boolean; onOpe
       cancelled = true;
     };
   }, [open, templates]);
+  return { templates, loadError, templateId, setTemplateId };
+}
+
+/** Cartes des gabarits, dans une boîte de création. */
+export function TemplatePicker({ choice }: { choice: ReturnType<typeof useTemplateChoice> }) {
+  const { templates, loadError, templateId, setTemplateId } = choice;
+  return (
+    <div className="flex min-h-0 flex-col gap-1">
+      <span className="text-[11px] font-medium text-neutral-500">Format</span>
+      {loadError && <p className="text-[12px] text-red-700">Gabarits indisponibles : {loadError}</p>}
+      {!templates && !loadError && <p className="text-[12px] text-neutral-500">Chargement des gabarits…</p>}
+      {templates && (
+        <div className="grid min-h-0 grid-cols-2 gap-2 overflow-y-auto p-0.5 sm:grid-cols-3" role="group" aria-label="Format du document" data-template-list>
+          {templates.map((t) => (
+            <TemplateCard key={t.id} template={t} selected={t.id === templateId} onSelect={() => setTemplateId(t.id)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** « Nouveau document » : nom, gabarit (cartes), Créer → ouvre le document dans l'éditeur. */
+export function NewDocumentDialog({ open, onOpenChange }: { open: boolean; onOpenChange(open: boolean): void }) {
+  const choice = useTemplateChoice(open);
+  const { templates, templateId } = choice;
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
 
   const canCreate = !!name.trim() && !!templates?.some((t) => t.id === templateId) && !busy;
 
@@ -161,18 +188,7 @@ export function NewDocumentDialog({ open, onOpenChange }: { open: boolean; onOpe
               onChange={(e) => setName(e.target.value)}
             />
           </div>
-          <div className="flex min-h-0 flex-col gap-1">
-            <span className="text-[11px] font-medium text-neutral-500">Format</span>
-            {loadError && <p className="text-[12px] text-red-700">Gabarits indisponibles : {loadError}</p>}
-            {!templates && !loadError && <p className="text-[12px] text-neutral-500">Chargement des gabarits…</p>}
-            {templates && (
-              <div className="grid min-h-0 grid-cols-2 gap-2 overflow-y-auto p-0.5 sm:grid-cols-3" role="group" aria-label="Format du document" data-template-list>
-                {templates.map((t) => (
-                  <TemplateCard key={t.id} template={t} selected={t.id === templateId} onSelect={() => setTemplateId(t.id)} />
-                ))}
-              </div>
-            )}
-          </div>
+          <TemplatePicker choice={choice} />
           {error && (
             <p className="text-[12px] text-red-700" role="alert" data-new-document-error>
               {error}

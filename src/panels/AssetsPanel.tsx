@@ -135,7 +135,9 @@ function AssetRow({ asset, usages, docId }: { asset: Asset; usages: AssetUsage[]
               ))}
             </ul>
           ) : (
-            <div className="mt-1 text-neutral-400">Inutilisée</div>
+            <div className="mt-1 text-neutral-400" data-asset-unplaced title="Glisser la vignette sur un cadre pour y placer la photo">
+              Non placée
+            </div>
           )}
           {worst && worst !== 'ok' && (
             <p className={`mt-1 ${LEVEL_CLASS[worst]}`}>

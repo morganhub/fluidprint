@@ -42,7 +42,18 @@ const textRun = z
     fontSize: z.number().positive().optional(),
     letterSpacing: z.number().optional(),
     transform: textTransform.optional(),
+    underline: z.boolean().optional(),
     characterStyleId: id.optional(),
+  })
+  .strict();
+
+const paragraphList = z
+  .object({
+    kind: z.enum(['bullet', 'number']),
+    level: z.number().int().min(0).max(8),
+    format: z.enum(['decimal', 'lower-alpha', 'upper-alpha', 'lower-roman', 'upper-roman']).optional(),
+    suffix: z.enum(['.', ')']).optional(),
+    start: z.number().int().min(0).optional(),
   })
   .strict();
 
@@ -53,6 +64,11 @@ const paragraph = z
     lineHeight: z.number().positive().optional(),
     align: textAlign.optional(),
     spaceBefore: mm.optional(),
+    spaceAfter: z.number().nonnegative().optional(),
+    leftIndent: z.number().nonnegative().optional(),
+    firstLineIndent: mm.optional(),
+    list: paragraphList.optional(),
+    paragraphStyleId: id.optional(),
   })
   .strict();
 
@@ -216,7 +232,7 @@ const documentSchema = z
       ),
     styles: z
       .object({
-        paragraph: z.array(z.object({ id, name: z.string(), style: textStyle }).strict()),
+        paragraph: z.array(z.object({ id, name: z.string(), style: textStyle, origin: z.literal('word').optional() }).strict()),
         character: z.array(z.object({ id, name: z.string(), style: textRun.omit({ text: true, characterStyleId: true }).partial() }).strict()),
       })
       .strict(),
@@ -393,13 +409,20 @@ function checkIntegrity(doc: LayoutDocument): ValidationError[] {
           else if (chainPrev.has(obj.nextId)) errors.push({ path: `${at}.nextId`, message: `le bloc ${obj.nextId} suit déjà ${chainPrev.get(obj.nextId)}` });
           else chainPrev.set(obj.nextId, key);
         }
-        obj.paragraphs.forEach((para, p) =>
+        obj.paragraphs.forEach((para, p) => {
           para.runs.forEach((run, r) => {
             if (run.characterStyleId && !characterStyleIds.has(run.characterStyleId)) {
               errors.push({ path: `${at}.paragraphs.${p}.runs.${r}.characterStyleId`, message: `style de caractère inconnu : ${run.characterStyleId}` });
             }
-          }),
-        );
+          });
+          if (para.paragraphStyleId && !paragraphStyleIds.has(para.paragraphStyleId)) {
+            errors.push({ path: `${at}.paragraphs.${p}.paragraphStyleId`, message: `style de paragraphe inconnu : ${para.paragraphStyleId}` });
+          }
+          // Retrait suspendu : la première ligne peut sortir du retrait gauche, jamais du bloc.
+          if ((para.leftIndent ?? 0) + (para.firstLineIndent ?? 0) < -1e-6) {
+            errors.push({ path: `${at}.paragraphs.${p}.firstLineIndent`, message: 'la première ligne dépasserait le bord gauche du bloc (retrait de première ligne plus grand que le retrait gauche)' });
+          }
+        });
         break;
       case 'rect':
       case 'ellipse':

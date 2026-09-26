@@ -151,6 +151,94 @@ async function drain(stream: Readable): Promise<void> {
   await finished(stream).catch(() => undefined);
 }
 
+export interface ImageToStore {
+  /** Contenu du fichier : c'est lui qui décide du format, pas son nom. */
+  content: Buffer;
+  /** Nom affiché dans le panneau Images (nom du fichier d'origine). */
+  displayName: string;
+  /** Fichier déjà écrit sur le disque (envoi reçu) : renommé en original plutôt que réécrit. */
+  uploadFile?: string;
+}
+
+/**
+ * Enregistre une photo dans le dossier du document, comme une photo déposée : original intact
+ * (assets/originals/), aperçu WebP pour l'écran (assets/previews/), copie PNG d'impression pour un TIFF
+ * (assets/print/). Renvoie l'asset à ajouter au document ; le document lui-même n'est pas modifié (c'est
+ * l'éditeur qui l'ajoute, dans une étape d'annulation). 415 si le contenu n'est pas une image acceptée.
+ */
+export async function storeImageAsset(documentsDir: string, docId: string, image: ImageToStore): Promise<Asset> {
+  const assetsDir = path.join(documentDir(documentsDir, docId), 'assets');
+  const originalsDir = path.join(assetsDir, 'originals');
+  const previewsDir = path.join(assetsDir, 'previews');
+  const printDir = path.join(assetsDir, 'print');
+  await mkdir(originalsDir, { recursive: true });
+  await mkdir(previewsDir, { recursive: true });
+
+  const { content, displayName } = image;
+  let meta: Metadata;
+  try {
+    meta = await sharp(content).metadata();
+  } catch {
+    throw new HttpError(415, `Fichier illisible comme image : ${ACCEPTED_LABEL} attendu`);
+  }
+  const format = meta.format ? FORMATS[meta.format] : undefined;
+  if (!format || !meta.width || !meta.height) {
+    throw new HttpError(415, `Format ${meta.format ?? 'inconnu'} refusé : ${ACCEPTED_LABEL} attendu`);
+  }
+
+  let reserved: { stem: string; original: string; preview: string } | undefined;
+  let printFile: string | undefined;
+  try {
+    const declaredExt = path.extname(displayName).toLowerCase();
+    const ext = format.aliases.includes(declaredExt) ? declaredExt : format.ext;
+    reserved = await reserveNames(originalsDir, previewsDir, safeBaseName(displayName), ext);
+    if (image.uploadFile) await renameWithRetry(image.uploadFile, reserved.original);
+    else await writeFileAtomic(reserved.original, content);
+
+    let preview: Buffer;
+    try {
+      preview = await makePreview(content, !!meta.hasProfile);
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(422, `Image illisible : ${(error as Error).message}`);
+    }
+    await writeFileAtomic(reserved.preview, preview);
+
+    if (NEEDS_PRINT_COPY.has(meta.format!)) {
+      let copy: Buffer;
+      try {
+        copy = await makePrintCopy(content, meta);
+      } catch (error) {
+        throw new HttpError(422, `Image illisible : ${(error as Error).message}`);
+      }
+      await mkdir(printDir, { recursive: true });
+      // Le nom de l'aperçu, réservé de façon exclusive, garantit un nom libre ici aussi.
+      printFile = path.join(printDir, `${reserved.stem}.png`);
+      await writeFileAtomic(printFile, copy);
+    }
+
+    return {
+      id: `img-${randomUUID().replace(/-/g, '').slice(0, 12)}`,
+      kind: 'image',
+      name: displayName,
+      original: `assets/originals/${path.basename(reserved.original)}`,
+      preview: `assets/previews/${path.basename(reserved.preview)}`,
+      ...(printFile ? { print: `assets/print/${path.basename(printFile)}` } : {}),
+      // Dimensions telles qu'affichées : une photo de portrait marquée « tourner de 90° » par l'EXIF
+      // est stockée en paysage.
+      width: meta.autoOrient?.width ?? meta.width,
+      height: meta.autoOrient?.height ?? meta.height,
+    };
+  } catch (error) {
+    if (reserved) {
+      await rm(reserved.original, { force: true });
+      await rm(reserved.preview, { force: true });
+      if (printFile) await rm(printFile, { force: true });
+    }
+    throw error;
+  }
+}
+
 export async function registerAssetRoutes(app: FastifyInstance, ctx: RouteContext): Promise<void> {
   const maxBytes = ctx.maxUploadBytes ?? MAX_UPLOAD_BYTES;
   await app.register(multipart, { limits: { fileSize: maxBytes, files: 1 } });
@@ -174,85 +262,22 @@ export async function registerAssetRoutes(app: FastifyInstance, ctx: RouteContex
       throw new HttpError(415, `Type de fichier refusé (${part.mimetype || 'inconnu'}) : ${ACCEPTED_LABEL} attendu`);
     }
 
-    const assetsDir = path.join(documentDir(ctx.documentsDir, id), 'assets');
-    const originalsDir = path.join(assetsDir, 'originals');
-    const previewsDir = path.join(assetsDir, 'previews');
-    const printDir = path.join(assetsDir, 'print');
-    await mkdir(originalsDir, { recursive: true });
-    await mkdir(previewsDir, { recursive: true });
-
     // Le fichier reçu est d'abord écrit sous un nom temporaire : un envoi interrompu ne laisse
     // jamais un « original » tronqué qui ressemblerait à une vraie photo.
+    const originalsDir = path.join(documentDir(ctx.documentsDir, id), 'assets', 'originals');
+    await mkdir(originalsDir, { recursive: true });
+    await mkdir(path.join(documentDir(ctx.documentsDir, id), 'assets', 'previews'), { recursive: true });
     const upload = path.join(originalsDir, `.upload-${randomUUID()}.part`);
-    let reserved: { stem: string; original: string; preview: string } | undefined;
-    let printFile: string | undefined;
     try {
       await pipeline(part.file, createWriteStream(upload, { flags: 'wx' }));
       if (part.file.truncated) {
         throw new HttpError(413, `Fichier trop lourd : ${Math.round(maxBytes / 1024 / 1024)} Mo au maximum`);
       }
-
       // sharp reçoit le contenu, jamais le chemin : libvips garde en cache les fichiers qu'il ouvre (et en
       // mappe certains en mémoire), et Windows refuse alors de les renommer ou de les supprimer (EBUSY).
       const content = await readFile(upload);
-      let meta: Metadata;
-      try {
-        meta = await sharp(content).metadata();
-      } catch {
-        throw new HttpError(415, `Fichier illisible comme image : ${ACCEPTED_LABEL} attendu`);
-      }
-      const format = meta.format ? FORMATS[meta.format] : undefined;
-      if (!format || !meta.width || !meta.height) {
-        throw new HttpError(415, `Format ${meta.format ?? 'inconnu'} refusé : ${ACCEPTED_LABEL} attendu`);
-      }
-
-      const declaredExt = path.extname(displayName).toLowerCase();
-      const ext = format.aliases.includes(declaredExt) ? declaredExt : format.ext;
-      reserved = await reserveNames(originalsDir, previewsDir, safeBaseName(displayName), ext);
-      await renameWithRetry(upload, reserved.original);
-
-      let preview: Buffer;
-      try {
-        preview = await makePreview(content, !!meta.hasProfile);
-      } catch (error) {
-        if (error instanceof HttpError) throw error;
-        throw new HttpError(422, `Image illisible : ${(error as Error).message}`);
-      }
-      await writeFileAtomic(reserved.preview, preview);
-
-      if (NEEDS_PRINT_COPY.has(meta.format!)) {
-        let copy: Buffer;
-        try {
-          copy = await makePrintCopy(content, meta);
-        } catch (error) {
-          throw new HttpError(422, `Image illisible : ${(error as Error).message}`);
-        }
-        await mkdir(printDir, { recursive: true });
-        // Le nom de l'aperçu, réservé de façon exclusive, garantit un nom libre ici aussi.
-        printFile = path.join(printDir, `${reserved.stem}.png`);
-        await writeFileAtomic(printFile, copy);
-      }
-
-      const asset: Asset = {
-        id: `img-${randomUUID().replace(/-/g, '').slice(0, 12)}`,
-        kind: 'image',
-        name: displayName,
-        original: `assets/originals/${path.basename(reserved.original)}`,
-        preview: `assets/previews/${path.basename(reserved.preview)}`,
-        ...(printFile ? { print: `assets/print/${path.basename(printFile)}` } : {}),
-        // Dimensions telles qu'affichées : une photo de portrait marquée « tourner de 90° » par l'EXIF
-        // est stockée en paysage.
-        width: meta.autoOrient?.width ?? meta.width,
-        height: meta.autoOrient?.height ?? meta.height,
-      };
+      const asset = await storeImageAsset(ctx.documentsDir, id, { content, displayName, uploadFile: upload });
       return reply.code(201).send(asset);
-    } catch (error) {
-      if (reserved) {
-        await rm(reserved.original, { force: true });
-        await rm(reserved.preview, { force: true });
-        if (printFile) await rm(printFile, { force: true });
-      }
-      throw error;
     } finally {
       await rm(upload, { force: true });
     }

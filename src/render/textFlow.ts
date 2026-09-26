@@ -12,11 +12,12 @@
 // signature par bloc (géométrie de l'habillage, article et boîtes de la chaîne, polices chargées) ; un
 // bloc se re-rend quand SA signature change.
 import { createContext, useContext, useMemo, useSyncExternalStore, type CSSProperties } from 'react';
+import { hasLists, listMarkers } from '../model/lists';
 import { breakPositions, chainFrames, isChained, sliceStory, type StoryPos, type StorySlice } from '../model/threading';
 import type { Id, LayoutDocument, Paragraph, TextObject, TextStyle } from '../model/types';
 import { wrapIndex, type WrapFloats } from '../model/wrap';
 import { useRender, type RenderMode } from './context';
-import { paragraphCss, renderNnbsp, runCss, textBlockCss, wrapFloatCss } from './textCss';
+import { markerAttrs, paragraphCss, renderNnbsp, runCss, TAB_CSS, tabbedParts, textBlockCss, wrapFloatCss } from './textCss';
 import { measureTextContentMm } from './textMetrics';
 
 /** Dépassement toléré dans un bloc chaîné (mm) : le même que celui du « + » (text/overset.tsx). */
@@ -52,8 +53,21 @@ function applyCss(el: HTMLElement, css: CSSProperties) {
   }
 }
 
-/** Même arbre DOM que TextFrameView : flottants d'habillage, paragraphes, segments, retours forcés. */
-function fillTextDom(el: HTMLElement, paragraphs: Paragraph[], style: TextStyle, continues: boolean, floats: WrapFloats | null, doc: LayoutDocument) {
+/** Puce ou numéro de chaque paragraphe d'un morceau d'article, d'après les numéros de l'article entier. */
+function sliceMarkers(all: (string | null)[] | null, slice: StorySlice): (string | null)[] {
+  return slice.paragraphs.map((para, i) => (all && para.list ? (all[slice.first + i] ?? null) : null));
+}
+
+/** Même arbre DOM que TextFrameView : flottants d'habillage, paragraphes (puces), segments, retours forcés, tabulations. */
+function fillTextDom(
+  el: HTMLElement,
+  paragraphs: Paragraph[],
+  markers: (string | null)[],
+  style: TextStyle,
+  continues: boolean,
+  floats: WrapFloats | null,
+  doc: LayoutDocument,
+) {
   el.replaceChildren();
   for (const f of [floats?.left, floats?.right]) {
     if (!f) continue;
@@ -64,14 +78,22 @@ function fillTextDom(el: HTMLElement, paragraphs: Paragraph[], style: TextStyle,
   }
   paragraphs.forEach((para, i) => {
     const p = document.createElement('div');
+    for (const [name, value] of Object.entries(markerAttrs(markers[i]))) p.setAttribute(name, value);
     applyCss(p, paragraphCss(para, i, paragraphs.length, style, continues));
     if (para.runs.some((r) => r.text !== '')) {
       for (const run of para.runs) {
         const span = document.createElement('span');
         applyCss(span, runCss(run, doc));
-        run.text.split('\n').forEach((part, j) => {
+        run.text.split('\n').forEach((line, j) => {
           if (j > 0) span.appendChild(document.createElement('br'));
-          span.appendChild(document.createTextNode(renderNnbsp(part)));
+          for (const part of tabbedParts(line)) {
+            if (part === '\t') {
+              const tab = document.createElement('span');
+              applyCss(tab, TAB_CSS);
+              tab.textContent = '\t';
+              span.appendChild(tab);
+            } else span.appendChild(document.createTextNode(renderNnbsp(part)));
+          }
         });
         p.appendChild(span);
       }
@@ -85,6 +107,8 @@ function measureChain(doc: LayoutDocument, frames: TextObject[], head: TextObjec
   const out = new Map<Id, StorySlice>();
   const paras = head.paragraphs;
   const breaks = breakPositions(paras);
+  const markers = hasLists(paras) ? listMarkers(paras) : null;
+  const empty = (): StorySlice => ({ paragraphs: [], continues: false, first: 0 });
   const el = document.createElement('div');
   el.setAttribute('aria-hidden', 'true');
   document.body.appendChild(el);
@@ -94,7 +118,7 @@ function measureChain(doc: LayoutDocument, frames: TextObject[], head: TextObjec
     let done = false;
     frames.forEach((frame, fi) => {
       if (done) {
-        out.set(frame.id, { paragraphs: [], continues: false });
+        out.set(frame.id, empty());
         return;
       }
       if (fi === frames.length - 1) {
@@ -109,7 +133,7 @@ function measureChain(doc: LayoutDocument, frames: TextObject[], head: TextObjec
       const fits = (to: number) => {
         if (to <= bi) return true;
         const slice = sliceStory(paras, from, to === breaks.length - 1 ? null : breaks[to]);
-        fillTextDom(el, slice.paragraphs, head.style, slice.continues, floats, doc);
+        fillTextDom(el, slice.paragraphs, sliceMarkers(markers, slice), head.style, slice.continues, floats, doc);
         return measureTextContentMm(el, el, frame.w) <= frame.h + CHAIN_FIT_TOLERANCE_MM;
       };
       if (fits(breaks.length - 1)) {
@@ -125,7 +149,7 @@ function measureChain(doc: LayoutDocument, frames: TextObject[], head: TextObjec
         if (fits(mid)) lo = mid;
         else hi = mid;
       }
-      out.set(frame.id, lo === bi ? { paragraphs: [], continues: false } : sliceStory(paras, from, breaks[lo]));
+      out.set(frame.id, lo === bi ? empty() : sliceStory(paras, from, breaks[lo]));
       from = breaks[lo];
       bi = lo;
     });
@@ -246,6 +270,8 @@ export const TextFlowContext = createContext<TextFlowStore | null>(null);
 
 export interface TextFlow {
   paragraphs: Paragraph[];
+  /** Puce ou numéro de chaque paragraphe affiché (null hors liste), numérotés sur l'article entier. */
+  markers: (string | null)[];
   /** Mise en forme du bloc : celle du premier bloc de la chaîne (l'article), sinon la sienne. */
   style: TextStyle;
   floats: WrapFloats | null;
@@ -259,12 +285,14 @@ export function textFlowFor(doc: LayoutDocument, obj: TextObject, mode: RenderMo
   const wraps = store ? store.wraps(doc, mode === 'print') : wrapIndex(doc, mode === 'print');
   const floats = wraps.get(obj.id) ?? null;
   if (!isChained(doc, obj.id) || typeof document === 'undefined') {
-    return { paragraphs: obj.paragraphs, style: obj.style, floats, continues: false, chained: false };
+    const markers = hasLists(obj.paragraphs) ? listMarkers(obj.paragraphs) : obj.paragraphs.map(() => null);
+    return { paragraphs: obj.paragraphs, markers, style: obj.style, floats, continues: false, chained: false };
   }
   const frames = chainFrames(doc, obj.id);
   const head = doc.objects[frames[0]] as TextObject;
-  const slice = chainLayout(doc, frames, wraps, mode).get(obj.id) ?? { paragraphs: [], continues: false };
-  return { paragraphs: slice.paragraphs, style: head.style, floats, continues: slice.continues, chained: true };
+  const slice = chainLayout(doc, frames, wraps, mode).get(obj.id) ?? { paragraphs: [], continues: false, first: 0 };
+  const all = hasLists(head.paragraphs) ? listMarkers(head.paragraphs) : null;
+  return { paragraphs: slice.paragraphs, markers: sliceMarkers(all, slice), style: head.style, floats, continues: slice.continues, chained: true };
 }
 
 const noSubscribe = () => () => {};
@@ -276,4 +304,28 @@ export function useTextFlow(obj: TextObject): TextFlow {
   useSyncExternalStore(subscribe, () => store?.key(obj.id) ?? '');
   const { doc, mode } = useRender();
   return textFlowFor(doc, obj, mode, store);
+}
+
+// ---------------------------------------------------------------- coulée d'un article neuf (import Word)
+
+export interface StoryFit {
+  /** Morceau d'article reçu par chaque bloc, dans l'ordre des blocs donnés. */
+  slices: StorySlice[];
+  /** Texte en excès au-delà du dernier bloc (paragraphes non vides) ; vide si tout tient. */
+  overflow: Paragraph[];
+}
+
+/**
+ * Coulée de l'article du premier bloc dans une suite de blocs (chaînés ou non encore), mesurée comme le
+ * rendu, avec ce qui reste au-delà du dernier : c'est ce qui décide combien de blocs « Remplir
+ * automatiquement » garde, et le texte en excès signalé dans le rapport. Navigateur seulement.
+ */
+export function fitStory(doc: LayoutDocument, frameIds: Id[]): StoryFit {
+  const frames = frameIds.map((id) => doc.objects[id] as TextObject);
+  const last = frames[frames.length - 1];
+  // Un bloc fictif, immense, derrière le dernier : ce qu'il reçoit est le texte en excès.
+  const spill: TextObject = { ...last, id: '\u0000excès', h: 1e6 };
+  const layout = measureChain(doc, [...frames, spill], frames[0], wrapIndex(doc, false));
+  const hasText = (p: Paragraph) => p.runs.some((r) => r.text.trim() !== '');
+  return { slices: frameIds.map((id) => layout.get(id)!), overflow: (layout.get(spill.id)?.paragraphs ?? []).filter(hasText) };
 }

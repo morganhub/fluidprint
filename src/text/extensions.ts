@@ -5,9 +5,12 @@ import { Extension, Mark, Node, type AnyExtension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { Fragment, type Mark as PmMark, type Node as PmNode, type ParseRule, type Schema } from '@tiptap/pm/model';
 import { Plugin, PluginKey, Selection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { CSSProperties } from 'react';
-import type { ColorRef, LayoutDocument, TextStyle } from '../model/types';
+import { listMarkers } from '../model/lists';
+import type { ColorRef, LayoutDocument, ParagraphList, TextStyle } from '../model/types';
 import { colorCss } from '../render/color';
+import { indentCss } from '../render/textCss';
 import { getPersistence } from '../store/persistence';
 import { NNBSP_RENDER } from '../render/TextFrameView';
 import { RUN_MARKS, type RunKey } from './richText';
@@ -107,6 +110,17 @@ function runMarks(ctx: TextEditContext) {
     runMark({ key: 'fontSize', css: (v) => ({ fontSize: `${v}pt` }) }, ctx),
     runMark({ key: 'letterSpacing', css: (v) => ({ letterSpacing: `${v}em` }) }, ctx),
     runMark({ key: 'transform', css: (v) => ({ textTransform: v as string }) }, ctx),
+    runMark(
+      {
+        key: 'underline',
+        css: (v) => ({ textDecoration: v ? 'underline' : 'none' }),
+        pasteRules: [
+          { tag: 'u', getAttrs: () => ({ value: true }) },
+          { style: 'text-decoration', getAttrs: (value: string) => (/underline/.test(value) ? { value: true } : false) },
+        ],
+      },
+      ctx,
+    ),
     runMark({ key: 'characterStyleId', css: () => ({}) }, ctx),
   ];
 }
@@ -131,20 +145,37 @@ export const NarrowNbsp = Node.create({
   },
 });
 
+/** Variable CSS de l'espace après d'un paragraphe, lue par la règle `p:not(:last-child)` de l'éditeur (TextEditor). */
+export const SPACE_AFTER_VAR = '--fl-space-after';
+
+type AttrKind = 'number' | 'string' | 'json';
+
 /** Surcharges de paragraphe du modèle, en attributs du nœud paragraphe (lues seulement depuis l'éditeur). */
 const ParagraphAttributes = Extension.create({
   name: 'paragraphAttributes',
   addGlobalAttributes() {
-    const attr = (name: string, css: (v: unknown) => CSSProperties, keepOnSplit = true) => ({
+    const attr = (name: string, css: (v: unknown) => CSSProperties, keepOnSplit = true, kind: AttrKind = 'number') => ({
       default: null,
       keepOnSplit,
       parseHTML: (el: HTMLElement) => {
         const raw = el.getAttribute(`data-para-${name}`);
         if (raw === null) return null;
-        return name === 'align' ? raw : Number(raw);
+        if (kind === 'string') return raw;
+        if (kind === 'json') {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        }
+        return Number(raw);
       },
-      renderHTML: (attrs: Record<string, unknown>) =>
-        attrs[name] === null || attrs[name] === undefined ? {} : { [`data-para-${name}`]: String(attrs[name]), style: cssText(css(attrs[name])) },
+      renderHTML: (attrs: Record<string, unknown>) => {
+        const value = attrs[name];
+        if (value === null || value === undefined) return {};
+        const style = cssText(css(value));
+        return { [`data-para-${name}`]: kind === 'json' ? JSON.stringify(value) : String(value), ...(style ? { style } : {}) };
+      },
     });
     return [
       {
@@ -152,14 +183,55 @@ const ParagraphAttributes = Extension.create({
         attributes: {
           fontSize: attr('fontSize', (v) => ({ fontSize: `${v}pt` })),
           lineHeight: attr('lineHeight', (v) => ({ lineHeight: v as number })),
-          align: attr('align', (v) => ({ textAlign: v as CSSProperties['textAlign'] })),
+          align: attr('align', (v) => ({ textAlign: v as CSSProperties['textAlign'] }), true, 'string'),
           // Un nouveau paragraphe (Entrée) ne reprend pas l'espace avant du précédent.
           spaceBefore: attr('spaceBefore', (v) => ({ marginTop: `${v}mm` }), false),
+          // L'espace après ne s'applique pas au dernier paragraphe : une variable lue par la feuille de l'éditeur.
+          spaceAfter: attr('spaceAfter', (v) => ({ [SPACE_AFTER_VAR]: `${v}mm` }) as CSSProperties),
+          leftIndent: attr('leftIndent', (v) => indentCss({ leftIndent: v as number })),
+          firstLineIndent: attr('firstLineIndent', (v) => indentCss({ firstLineIndent: v as number })),
+          // Un nouvel élément de liste (Entrée) reste dans la liste : son numéro se recalcule.
+          list: attr('list', () => ({}), true, 'json'),
+          paragraphStyleId: attr('paragraphStyleId', () => ({}), true, 'string'),
         },
       },
     ];
   },
 });
+
+// ---------------------------------------------------------------- puces et numéros des listes
+
+const listMarkersKey = new PluginKey<DecorationSet>('listMarkers');
+
+/** Puces et numéros dessinés sur les paragraphes de liste, comme au rendu (`data-list-marker`, styles/app.css). */
+function markerDecorations(doc: PmNode): DecorationSet {
+  const paragraphs: { pos: number; node: PmNode }[] = [];
+  doc.forEach((node, offset) => {
+    if (node.type.name === 'paragraph') paragraphs.push({ pos: offset, node });
+  });
+  if (!paragraphs.some((p) => p.node.attrs.list)) return DecorationSet.empty;
+  const markers = listMarkers(paragraphs.map((p) => ({ list: (p.node.attrs.list as ParagraphList | null) ?? undefined })));
+  const decorations: Decoration[] = [];
+  paragraphs.forEach((p, i) => {
+    const marker = markers[i];
+    if (marker) decorations.push(Decoration.node(p.pos, p.pos + p.node.nodeSize, { 'data-list-marker': marker }));
+  });
+  return DecorationSet.create(doc, decorations);
+}
+
+/** Les numéros suivent chaque modification (un élément ajouté renumérote les suivants). */
+export function listMarkersPlugin(): Plugin<DecorationSet> {
+  return new Plugin<DecorationSet>({
+    key: listMarkersKey,
+    state: {
+      init: (_config, state) => markerDecorations(state.doc),
+      apply: (tr, old) => (tr.docChanged ? markerDecorations(tr.doc) : old),
+    },
+    props: {
+      decorations: (state) => listMarkersKey.getState(state),
+    },
+  });
+}
 
 // ---------------------------------------------------------------- commandes de mise en forme
 
@@ -340,6 +412,11 @@ export function textEditorExtensions(ctx: TextEditContext): AnyExtension[] {
         const current = effectiveValue(state, 'italic', !!block?.italic);
         return setRunValues(state, this.editor.view.dispatch, [{ key: 'italic', value: current !== true, block: !!block?.italic }]);
       };
+      const toggleUnderline = () => {
+        const state = this.editor.state;
+        const current = effectiveValue(state, 'underline', false);
+        return setRunValues(state, this.editor.view.dispatch, [{ key: 'underline', value: current !== true, block: false }]);
+      };
       // Début / fin du bloc : Chrome ne déplace pas toujours le curseur de lui-même dans l'éditeur.
       const jump = (toEnd: boolean, extend: boolean) => {
         const { state, view } = this.editor;
@@ -355,6 +432,7 @@ export function textEditorExtensions(ctx: TextEditContext): AnyExtension[] {
         'Shift-Mod-End': () => jump(true, true),
         'Mod-b': toggleWeight,
         'Mod-i': toggleItalic,
+        'Mod-u': toggleUnderline,
         Escape: () => {
           ctx.onExit();
           return true;
@@ -368,7 +446,7 @@ export function textEditorExtensions(ctx: TextEditContext): AnyExtension[] {
       };
     },
     addProseMirrorPlugins() {
-      return [typographyPlugin()];
+      return [typographyPlugin(), listMarkersPlugin()];
     },
   });
 

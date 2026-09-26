@@ -138,6 +138,11 @@ function ParagraphStyleRow({ style, doc, count, selectedTexts }: { style: Paragr
           {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         </button>
         <StyleName name={style.name} onRename={(name) => getEditor().apply('Renommer le style', (d) => renameStyle(d, 'paragraph', style.id, name))} />
+        {style.origin === 'word' && (
+          <span className="shrink-0 rounded bg-sky-100 px-1 text-[10px] font-semibold text-sky-800" data-style-origin="word" title="Créé par l’import d’un fichier Word">
+            Word
+          </span>
+        )}
         <span className="shrink-0 text-[11px] tabular-nums text-neutral-400" title={`${s.fontSize} pt, ${count} bloc(s)`}>
           {String(s.fontSize).replace('.', ',')} pt · {count}
         </span>
