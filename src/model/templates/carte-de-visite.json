@@ -1,0 +1,11 @@
+{
+  "id": "carte-de-visite",
+  "name": "Carte de visite 85 × 55",
+  "trim": { "w": 85, "h": 55 },
+  "bleed": 3,
+  "safety": 3,
+  "faces": [
+    { "id": "recto", "name": "Recto", "panels": [{ "name": "Recto", "w": 85 }] },
+    { "id": "verso", "name": "Verso", "panels": [{ "name": "Verso", "w": 85 }] }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "a4-recto-verso",
+  "name": "A4 recto verso",
+  "trim": { "w": 210, "h": 297 },
+  "bleed": 3,
+  "safety": 5,
+  "faces": [
+    { "id": "recto", "name": "Recto", "panels": [{ "name": "Recto", "w": 210 }] },
+    { "id": "verso", "name": "Verso", "panels": [{ "name": "Verso", "w": 210 }] }
+  ]
+}

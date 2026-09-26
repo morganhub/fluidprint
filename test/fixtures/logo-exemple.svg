@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Logo fictif « Atelier Horizon » (soleil sur l'horizon et lettres en blocs), écrit comme un export
+     d'Illustrator : prologue XML, métadonnées, style « enable-background », douze tracés à plat. -->
+<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 420 80" style="enable-background:new 0 0 420 80;" xml:space="preserve">
+<metadata><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description about="logo-exemple"/></rdf:RDF></metadata>
+<path d="M4 40C4 24.5 16.5 12 32 12S60 24.5 60 40Z"/>
+<path d="M2 44h60v6H2Z"/>
+<path d="M12 56h40v6H12Z"/>
+<path d="M80 8h10v17h20V8h10v42h-10V33H90v17H80Z"/>
+<path d="M128 8h40v42h-40ZM138 16v26h20V16Z"/>
+<path d="M176 8h32v22h-8l12 20h-11l-11-20h-4v20h-10ZM186 16v6h12v-6Z"/>
+<path d="M228 8h12v42h-12Z"/>
+<path d="M248 8h40v9l-26 25h26v8h-40v-9l26-25h-26Z"/>
+<path d="M296 8h40v42h-40ZM306 16v26h20V16Z"/>
+<path d="M344 8h10l20 26V8h10v42h-10l-20-26v26h-10Z"/>
+<path d="M80 56h304v6H80Z"/>
+<path d="M400 8l8 8-8 8-8-8Z"/>
+</svg>

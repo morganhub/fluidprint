@@ -1,0 +1,11 @@
+{
+  "id": "flyer-a5",
+  "name": "Flyer A5 recto verso",
+  "trim": { "w": 148, "h": 210 },
+  "bleed": 3,
+  "safety": 4,
+  "faces": [
+    { "id": "recto", "name": "Recto", "panels": [{ "name": "Recto", "w": 148 }] },
+    { "id": "verso", "name": "Verso", "panels": [{ "name": "Verso", "w": 148 }] }
+  ]
+}

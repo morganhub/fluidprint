@@ -1,0 +1,11 @@
+{
+  "id": "depliant-a4-accordeon",
+  "name": "Dépliant A4 pli accordéon",
+  "trim": { "w": 297, "h": 210 },
+  "bleed": 3,
+  "safety": 4,
+  "faces": [
+    { "id": "exterieur", "name": "Extérieur", "panels": [{ "name": "Volet 1", "w": 99 }, { "name": "Volet 2", "w": 99 }, { "name": "Volet 3", "w": 99 }] },
+    { "id": "interieur", "name": "Intérieur", "panels": [{ "name": "Volet 4", "w": 99 }, { "name": "Volet 5", "w": 99 }, { "name": "Volet 6", "w": 99 }] }
+  ]
+}

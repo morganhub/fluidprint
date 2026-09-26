@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Dépliant 3 volets 210 × 100</title>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;font-family:'Open Sans',sans-serif;color:#22313f}
+.volet{position:absolute;top:10mm;width:60mm;font-size:10pt;line-height:1.3}
+</style>
+</helmet>
+<!-- 210 × 100 mm fini (aucun gabarit) : fond perdu et plis donnés par les repères écran <sc-if>. -->
+<doc-page width="216mm" height="106mm">
+
+<section class="page" id="exterieur" data-screen-label="01 Extérieur">
+<div style="position:relative;width:100%;height:100%;overflow:hidden">
+  <div class="volet" style="left:8mm">Premier volet</div>
+  <div class="volet" style="left:78mm">Deuxième volet</div>
+  <div class="volet" style="left:148mm">Troisième volet</div>
+  <sc-if value="{{ showGuides }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:3mm;border:0.3mm solid #e0245e;pointer-events:none"></div>
+    <div style="position:absolute;top:0;bottom:0;left:73mm;border-left:0.3mm dashed #e0245e;pointer-events:none"></div>
+    <div style="position:absolute;top:0;bottom:0;left:143mm;border-left:0.3mm dashed #e0245e;pointer-events:none"></div>
+  </sc-if>
+</div>
+</section>
+
+<section class="page" id="interieur" data-screen-label="02 Intérieur">
+<div style="position:relative;width:100%;height:100%;overflow:hidden">
+  <div class="volet" style="left:8mm">Quatrième volet</div>
+  <div class="volet" style="left:78mm">Cinquième volet</div>
+  <div class="volet" style="left:148mm">Sixième volet</div>
+  <sc-if value="{{ showGuides }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:3mm;border:0.3mm solid #e0245e;pointer-events:none"></div>
+    <div style="position:absolute;top:0;bottom:0;left:72mm;border-left:0.3mm dashed #e0245e;pointer-events:none"></div>
+    <div style="position:absolute;top:0;bottom:0;left:142mm;border-left:0.3mm dashed #e0245e;pointer-events:none"></div>
+  </sc-if>
+</div>
+</section>
+
+</doc-page>
+</x-dc>
+</body>
+</html>

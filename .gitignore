@@ -1,0 +1,13 @@
+# Dépendances et environnements
+node_modules/
+print/.venv/
+__pycache__/
+.pytest_cache/
+
+# Construction et caches
+dist/
+.vite/
+*.log
+
+# Documents de l'utilisateur (données locales, jamais versionnées)
+documents/

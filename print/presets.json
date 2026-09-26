@@ -1,0 +1,99 @@
+{
+  "$comment": "Préréglages d'export (décisions P2 et P4). Lus par server/export.ts (Node) et print/*.py. Pour un imprimeur précis : copier « imprimeur », changer profil et encrage d'après sa fiche technique. Norme : PDF/X-4 seulement (PDF/X-1a exigerait d'aplatir la transparence ; un autre choix est refusé au chargement). Photos affichées au-delà de downsampleAbovePpi : réduites à downsamplePpi ; maxBytes : poids au-delà duquel l'export avertit.",
+  "defaultPreset": "imprimeur",
+  "profiles": {
+    "FOGRA39": {
+      "label": "Coated FOGRA39 (papier couché)",
+      "file": "CoatedFOGRA39.icc",
+      "outputConditionIdentifier": "FOGRA39",
+      "outputCondition": "Coated FOGRA39 (ISO 12647-2:2004)",
+      "registryName": "http://www.color.org",
+      "info": "Coated FOGRA39 (ISO 12647-2:2004), papier couché, offset feuille"
+    },
+    "GRACoL2006": {
+      "label": "Coated GRACoL 2006 (États-Unis, papier couché)",
+      "file": "CoatedGRACoL2006.icc",
+      "outputConditionIdentifier": "CGATS TR 006",
+      "outputCondition": "Coated GRACoL 2006 (ISO 12647-2:2004)",
+      "registryName": "http://www.color.org",
+      "info": "Coated GRACoL 2006 (ISO 12647-2:2004)"
+    },
+    "FOGRA51": {
+      "label": "PSO Coated v3 (FOGRA51)",
+      "file": "PSOcoated_v3.icc",
+      "outputConditionIdentifier": "FOGRA51",
+      "outputCondition": "PSO Coated v3 (FOGRA51)",
+      "registryName": "http://www.color.org",
+      "info": "PSO Coated v3, papier couché (ISO 12647-2:2013)"
+    },
+    "FOGRA52": {
+      "label": "PSO Uncoated v3 (FOGRA52)",
+      "file": "PSOuncoated_v3_FOGRA52.icc",
+      "outputConditionIdentifier": "FOGRA52",
+      "outputCondition": "PSO Uncoated v3 (FOGRA52)",
+      "registryName": "http://www.color.org",
+      "info": "PSO Uncoated v3, papier non couché (ISO 12647-2:2013)"
+    }
+  },
+  "presets": {
+    "imprimeur": {
+      "label": "Imprimeur (PDF/X-4, FOGRA39)",
+      "description": "Fichier à envoyer à l'imprimeur : CMJN exact du nuancier, photos converties au profil, fond perdu 3 mm, sans traits de coupe.",
+      "colorMode": "cmyk",
+      "standard": "PDF/X-4",
+      "profile": "FOGRA39",
+      "imageIntent": "perceptual",
+      "vectorIntent": "relative",
+      "blackPointCompensation": true,
+      "bleed": 3,
+      "cropMarks": false,
+      "maxInk": 300,
+      "downsamplePpi": 300,
+      "downsampleAbovePpi": 450,
+      "maxBytes": 100000000,
+      "refusePlaceholders": true
+    },
+    "traits-de-coupe": {
+      "label": "Imprimeur avec traits de coupe",
+      "description": "Comme « Imprimeur », page agrandie de 10 mm de chaque côté : traits de coupe et repères de pli hors du fond perdu.",
+      "colorMode": "cmyk",
+      "standard": "PDF/X-4",
+      "profile": "FOGRA39",
+      "imageIntent": "perceptual",
+      "vectorIntent": "relative",
+      "blackPointCompensation": true,
+      "bleed": 3,
+      "cropMarks": true,
+      "marksMargin": 10,
+      "maxInk": 300,
+      "downsamplePpi": 300,
+      "downsampleAbovePpi": 450,
+      "maxBytes": 100000000,
+      "refusePlaceholders": true
+    },
+    "rvb": {
+      "label": "RVB (contrôle)",
+      "description": "Le PDF tel que Chrome le produit, en RVB, pour relire la mise en page à l'écran. Ne pas envoyer à l'imprimeur.",
+      "colorMode": "rgb",
+      "standard": null,
+      "profile": null,
+      "bleed": 3,
+      "cropMarks": false,
+      "refusePlaceholders": false
+    },
+    "email": {
+      "label": "E-mail (PDF léger + PNG)",
+      "description": "PDF RVB sans fond perdu, photos réduites à 150 ppi, moins de 5 Mo ; une image PNG de chaque face à 150 ppi.",
+      "colorMode": "rgb",
+      "standard": null,
+      "profile": null,
+      "bleed": 0,
+      "cropMarks": false,
+      "downsamplePpi": 150,
+      "jpegQuality": 82,
+      "maxBytes": 5000000,
+      "pngPpi": 150,
+      "refusePlaceholders": false
+    }
+  }
+}

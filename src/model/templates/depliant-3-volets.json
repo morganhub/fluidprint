@@ -1,0 +1,27 @@
+{
+  "id": "depliant-a4-pli-roule",
+  "name": "Dépliant A4 pli roulé",
+  "trim": { "w": 297, "h": 210 },
+  "bleed": 3,
+  "safety": 4,
+  "faces": [
+    {
+      "id": "exterieur",
+      "name": "Extérieur",
+      "panels": [
+        { "name": "Rabat", "w": 97 },
+        { "name": "Dos", "w": 100 },
+        { "name": "Couverture", "w": 100 }
+      ]
+    },
+    {
+      "id": "interieur",
+      "name": "Intérieur",
+      "panels": [
+        { "name": "Intérieur gauche", "w": 100 },
+        { "name": "Intérieur centre", "w": 100 },
+        { "name": "Intérieur droit", "w": 97 }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Flyer A5 d'essai</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:'Open Sans',sans-serif;color:#22313f}
+.titre{font-size:20pt;font-weight:800;line-height:1.2;color:#ffffff}
+</style>
+</helmet>
+<!-- Flyer A5 recto verso (148 × 210 mm + 3 mm de fond perdu) : test de l'import tous formats. -->
+<doc-page width="154mm" height="216mm">
+
+<section class="page" id="recto" data-screen-label="01 Recto">
+<div style="position:relative;width:100%;height:100%;font-family:'Open Sans',sans-serif">
+  <div style="position:absolute;left:0;top:0;width:154mm;height:60mm;background:#2f5f9e"></div>
+  <div class="titre" style="position:absolute;left:13mm;top:20mm;width:128mm">Atelier numérique</div>
+  <div style="position:absolute;left:13mm;top:80mm;width:128mm;font-size:11pt;line-height:1.4">Un texte de présentation assez long pour tenir sur plusieurs lignes, afin de vérifier la mesure des lignes du bloc.</div>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:13mm;top:150mm;width:8mm;height:8mm;color:#2f5f9e"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
+</div>
+</section>
+
+<section class="page" id="verso" data-screen-label="02 Verso">
+<div style="position:relative;width:100%;height:100%;font-family:'Open Sans',sans-serif">
+  <div style="position:absolute;left:20mm;top:30mm;width:50mm;height:20mm;background:#f2b705;border-radius:2mm"></div>
+  <div style="position:absolute;left:20mm;top:100mm;font-size:12pt;font-weight:700">Inscriptions : example.com</div>
+</div>
+</section>
+
+</doc-page>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,68 @@
+/* Open Sans servie en local (licence OFL, public/fonts/OFL.txt) : rendu identique hors ligne et
+   incorporation garantie dans le PDF. Fichiers statiques plutôt que la police variable, que le
+   moteur PDF de Chrome incorpore moins proprement. Le design n'utilise que 400, 600, 700, 800 ; chaque
+   graisse a sa face italique (googlefonts/opensans, fonts/ttf/) : sans elle, Chrome dessinait un
+   italique synthétique en contours, incorporé en police Type 3 (audit C3). */
+@font-face {
+  font-family: 'Open Sans';
+  src: url('/fonts/OpenSans-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Open Sans';
+  src: url('/fonts/OpenSans-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Open Sans';
+  src: url('/fonts/OpenSans-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Open Sans';
+  src: url('/fonts/OpenSans-SemiBoldItalic.ttf') format('truetype');
+  font-weight: 600;
+  font-style: italic;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Open Sans';
+  src: url('/fonts/OpenSans-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Open Sans';
+  src: url('/fonts/OpenSans-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Open Sans';
+  src: url('/fonts/OpenSans-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: 'Open Sans';
+  src: url('/fonts/OpenSans-ExtraBoldItalic.ttf') format('truetype');
+  font-weight: 800;
+  font-style: italic;
+  font-display: block;
+}
+
+/* Filet de sécurité : une graisse ou un style sans face (police d'un autre document, face qui n'a pas
+   chargé) s'affiche avec la face la plus proche plutôt qu'en faux gras ou faux italique, que Chrome
+   incorpore au PDF en contours (Type 3). */
+html {
+  font-synthesis: none;
+}

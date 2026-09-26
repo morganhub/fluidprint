@@ -1,0 +1,8 @@
+{
+  "id": "affiche-a3",
+  "name": "Affiche A3",
+  "trim": { "w": 297, "h": 420 },
+  "bleed": 3,
+  "safety": 5,
+  "faces": [{ "id": "recto", "name": "Affiche", "panels": [{ "name": "Affiche", "w": 297 }] }]
+}
